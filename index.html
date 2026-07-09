@@ -1,0 +1,1150 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Chicken Cross" />
+<title>Chicken Cross</title>
+<style>
+  :root { --ink:#12232e; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #1c2a33; font-family: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+    user-select: none; -webkit-user-select: none; touch-action: none; color: #fff;
+    -webkit-touch-callout: none; overscroll-behavior: none;
+  }
+  canvas { position: fixed; inset: 0; margin: auto; display: block; background: #6bbf4a;
+           touch-action: none; }
+
+  /* ---------- Screens ---------- */
+  .screen { position: fixed; inset: 0; display: none; flex-direction: column;
+            align-items: center; justify-content: flex-start; overflow-y: auto;
+            touch-action: pan-y; }
+  .screen.active { display: flex; }
+  .screen.opaque { background:
+      radial-gradient(120% 80% at 50% -10%, #a9e6ff 0%, #6fc3f0 40%, #3f9be0 100%); }
+  .screen.game { background: transparent; pointer-events: none; }
+
+  .topbar { width:100%; max-width:560px; display:flex; align-items:center; gap:10px;
+            padding: calc(14px + env(safe-area-inset-top)) 16px 6px; }
+  .topbar .grow { flex:1; }
+  .iconbtn { background: rgba(255,255,255,.9); border:none; border-radius:14px;
+             width:46px; height:46px; font-size:22px; cursor:pointer; color:#12232e;
+             box-shadow:0 4px 0 rgba(0,0,0,.18); }
+  .iconbtn:active { transform: translateY(2px); box-shadow:0 2px 0 rgba(0,0,0,.18); }
+
+  h1.title { font-size: 44px; margin: 30px 0 4px; text-shadow: 0 4px 0 rgba(0,0,0,.25); }
+  .subtitle { opacity:.95; font-size:17px; margin:0 0 8px; }
+  .content { width:100%; max-width:560px; padding: 8px 16px 40px; }
+
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px;
+         border:none; border-radius:16px; padding:16px 22px; font-size:19px; font-weight:800;
+         cursor:pointer; color:#fff; background:#ffb32b; box-shadow:0 6px 0 #d98e12;
+         margin:8px 0; }
+  .btn.green { background:#43c65a; box-shadow:0 6px 0 #2f9a41; }
+  .btn.blue  { background:#3f9be0; box-shadow:0 6px 0 #2b74ab; }
+  .btn.grey  { background:#8794a0; box-shadow:0 6px 0 #5e6b76; }
+  .btn.wide  { width:100%; }
+  .btn:active { transform: translateY(3px); box-shadow:0 3px 0 rgba(0,0,0,.3); }
+  .btn:disabled { filter:grayscale(.7) brightness(.9); cursor:not-allowed; }
+
+  /* ---------- Profiles ---------- */
+  .profile-list { display:flex; flex-direction:column; gap:12px; }
+  .profile-card { position:relative; display:grid; grid-template-columns:56px 1fr auto;
+                  align-items:center; gap:12px; background:rgba(255,255,255,.95); color:#12232e;
+                  border-radius:18px; padding:14px 16px; cursor:pointer; box-shadow:0 6px 0 rgba(0,0,0,.15); }
+  .profile-card:active { transform:translateY(2px); }
+  .profile-card .avatar { font-size:40px; grid-row:1/3; text-align:center; }
+  .profile-card .pname { font-weight:800; font-size:20px; }
+  .profile-card .pmeta { font-size:14px; opacity:.7; grid-column:2; }
+  .profile-card.add { color:#12232e; opacity:.9; grid-template-columns:56px 1fr; }
+  .profile-card .ppin, .profile-card .pdelete {
+      background:none; border:none; font-size:20px; cursor:pointer; grid-row:1/3; }
+  .profile-card .row-btns { grid-row:1/3; display:flex; gap:2px; }
+
+  /* ---------- Map / worlds ---------- */
+  .player-chip { display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.95);
+                 color:#12232e; border-radius:16px; padding:8px 14px; font-weight:800; font-size:17px; }
+  .player-chip .pmeta { font-weight:600; font-size:13px; opacity:.75; }
+  .world-card { background:rgba(255,255,255,.96); color:#12232e; border-radius:20px;
+                padding:16px; margin:14px 0; box-shadow:0 8px 0 rgba(0,0,0,.12);
+                background-image: linear-gradient(180deg, var(--wa,#eee) 0%, #ffffff 60%); }
+  .world-card.locked { filter:grayscale(.6) opacity(.7); }
+  .world-head { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+  .world-emoji { font-size:34px; }
+  .world-name { font-weight:900; font-size:20px; }
+  .world-tag { font-size:13px; opacity:.7; }
+  .world-count { margin-left:auto; font-weight:800; opacity:.8; }
+  .dots { display:flex; gap:10px; flex-wrap:wrap; }
+  .lvl-dot { width:46px; height:46px; border-radius:13px; border:none; font-size:16px; font-weight:900;
+             cursor:pointer; color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .lvl-dot small { font-size:9px; line-height:1; margin-top:1px; }
+  .lvl-dot.done { background:#43c65a; box-shadow:0 4px 0 #2f9a41; }
+  .lvl-dot.next { background:#ffb32b; box-shadow:0 4px 0 #d98e12; animation:pulse 1.2s infinite; }
+  .lvl-dot.locked { background:#b8c0c8; box-shadow:0 4px 0 #8d97a1; cursor:not-allowed; }
+  @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+
+  /* ---------- Leaderboard ---------- */
+  .lb-row { display:grid; grid-template-columns:44px 46px 1fr auto auto; align-items:center; gap:10px;
+            background:rgba(255,255,255,.95); color:#12232e; border-radius:14px; padding:10px 14px; margin:8px 0;
+            box-shadow:0 4px 0 rgba(0,0,0,.12); }
+  .lb-row.me { outline:3px solid #ffb32b; }
+  .lb-rank { font-size:22px; font-weight:900; text-align:center; }
+  .lb-avatar { font-size:30px; }
+  .lb-name { font-weight:800; }
+  .lb-stat { font-size:14px; font-weight:700; opacity:.85; white-space:nowrap; }
+  .lb-empty { text-align:center; opacity:.85; padding:30px; }
+
+  /* ---------- Game HUD ---------- */
+  #gbar { position:fixed; top:0; left:0; right:0; display:flex; align-items:center; gap:10px;
+          padding: calc(12px + env(safe-area-inset-top)) 14px 12px; pointer-events:none; }
+  #gbar .iconbtn { pointer-events:auto; }
+  #gbar .pill { pointer-events:none; background:rgba(0,0,0,.35); border-radius:14px;
+                padding:8px 14px; font-weight:900; font-size:18px; color:#fff;
+                text-shadow:0 2px 0 rgba(0,0,0,.3); }
+  #g-progress { flex:1; text-align:center; }
+
+  /* ---------- Modals ---------- */
+  .modal { position:fixed; inset:0; display:none; place-items:center; z-index:50;
+           background:rgba(0,0,0,.5); padding:20px; }
+  .modal.visible { display:grid; }
+  .sheet { background:#fff; color:#12232e; border-radius:22px; padding:24px; width:100%;
+           max-width:380px; box-shadow:0 20px 60px rgba(0,0,0,.5); text-align:center; }
+  .sheet h2 { margin:0 0 6px; font-size:24px; }
+  .sheet p { margin:6px 0; opacity:.8; }
+  .sheet input { width:100%; padding:14px; font-size:18px; border:2px solid #d8dee4; border-radius:14px;
+                 margin:8px 0; text-align:center; }
+  .avatar-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin:12px 0; }
+  .avatar-choice { font-size:28px; padding:8px 0; border:2px solid transparent; border-radius:14px;
+                   background:#f0f3f6; cursor:pointer; }
+  .avatar-choice.selected { border-color:#ffb32b; background:#fff4dc; }
+  .row-btns2 { display:flex; gap:10px; margin-top:10px; }
+  .row-btns2 .btn { flex:1; margin:0; }
+
+  /* result modal stars/coins */
+  .stars { font-size:40px; letter-spacing:6px; margin:8px 0; }
+  .bigscore { font-size:44px; font-weight:900; margin:4px 0; }
+
+  /* PIN keypad */
+  .pin-dots { display:flex; gap:14px; justify-content:center; margin:14px 0; }
+  .pin-dots span { width:16px; height:16px; border-radius:50%; background:#d8dee4; }
+  .pin-dots span.on { background:#ffb32b; }
+  .pin-dots.shake { animation: shk .4s; }
+  @keyframes shk { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
+  .pin-pad { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:8px 0; }
+  .pin-key { font-size:24px; font-weight:800; padding:16px 0; border:none; border-radius:14px;
+             background:#f0f3f6; cursor:pointer; color:#12232e; }
+  .pin-key.blank { background:transparent; cursor:default; }
+  .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+           background:rgba(0,0,0,.8); color:#fff; padding:12px 20px; border-radius:14px;
+           font-weight:700; opacity:0; transition:opacity .3s; pointer-events:none; z-index:80; }
+  .toast.show { opacity:1; }
+
+  /* ---------- Touch devices (iPad-first) ---------- */
+  @media (pointer: coarse) {
+    .iconbtn { width:54px; height:54px; font-size:24px; }
+    .lvl-dot { width:56px; height:56px; font-size:18px; border-radius:16px; }
+    .lvl-dot small { font-size:11px; }
+    .btn { padding:18px 24px; font-size:20px; }
+    .pin-key { padding:20px 0; font-size:26px; }
+    .profile-card { padding:18px; }
+    .profile-card .ppin, .profile-card .pdelete { font-size:24px; padding:10px; }
+  }
+</style>
+
+<canvas id="c"></canvas>
+
+<!-- ============ SPLASH ============ -->
+<div class="screen opaque active" id="screen-splash">
+  <h1 class="title">🐔 Chicken Cross</h1>
+  <p class="subtitle">Dodge cars, ride logs, beat the trains!</p>
+  <div class="content" style="text-align:center">
+    <button class="btn green wide" onclick="App.play()">▶ Play</button>
+    <button class="btn blue wide" onclick="App.showLeaderboard()">🏆 High Scores</button>
+    <p style="opacity:.85;font-size:14px;margin-top:18px">
+      Move: Arrow keys / WASD · Swipe or tap on touch
+    </p>
+  </div>
+</div>
+
+<!-- ============ PROFILES ============ -->
+<div class="screen opaque" id="screen-profiles">
+  <div class="topbar">
+    <button class="iconbtn" onclick="App.showScreen('splash')">⬅</button>
+    <div class="grow"></div>
+    <button class="iconbtn btn-sound" onclick="App.toggleSound()">🔊</button>
+  </div>
+  <h1 class="title" style="font-size:32px;margin-top:6px">Who's playing?</h1>
+  <div class="content"><div class="profile-list" id="profile-list"></div></div>
+</div>
+
+<!-- ============ MAP ============ -->
+<div class="screen opaque" id="screen-map">
+  <div class="topbar">
+    <button class="iconbtn" onclick="App.play()">⬅</button>
+    <div class="player-chip" id="map-player"></div>
+    <div class="grow"></div>
+    <button class="iconbtn" onclick="App.showLeaderboard()">🏆</button>
+    <button class="iconbtn btn-sound" onclick="App.toggleSound()">🔊</button>
+  </div>
+  <div class="content">
+    <button class="btn blue wide" id="btn-endless" onclick="App.startEndless()">♾️ Endless Run</button>
+    <div id="world-list"></div>
+  </div>
+</div>
+
+<!-- ============ LEADERBOARD ============ -->
+<div class="screen opaque" id="screen-leaderboard">
+  <div class="topbar">
+    <button class="iconbtn" id="lb-back">⬅</button>
+    <div class="grow"></div>
+  </div>
+  <h1 class="title" style="font-size:32px">🏆 High Scores</h1>
+  <div class="content"><div id="lb-rows"></div></div>
+</div>
+
+<!-- ============ GAME ============ -->
+<div class="screen game" id="screen-game">
+  <div id="gbar">
+    <button class="iconbtn" onclick="Game.exitToMap()">⬅</button>
+    <div class="pill" id="g-progress">0</div>
+    <div class="grow" style="flex:1"></div>
+    <div class="pill" id="g-coins">🪙 0</div>
+  </div>
+</div>
+
+<!-- ============ MODALS ============ -->
+<div class="modal" id="new-profile-modal">
+  <div class="sheet">
+    <h2>New Player</h2>
+    <div class="avatar-grid" id="avatar-grid"></div>
+    <input id="new-name" maxlength="14" placeholder="Name" />
+    <input id="new-pin" maxlength="4" inputmode="numeric" placeholder="PIN (optional, 4 digits)" />
+    <div class="row-btns2">
+      <button class="btn grey" onclick="App.closeModal('new-profile-modal')">Cancel</button>
+      <button class="btn green" onclick="App.createProfile()">Create</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="pin-modal">
+  <div class="sheet">
+    <h2 id="pin-title">Enter PIN</h2>
+    <p id="pin-sub"></p>
+    <div class="pin-dots" id="pin-dots"><span></span><span></span><span></span><span></span></div>
+    <div class="pin-pad" id="pin-pad"></div>
+    <button class="btn grey wide" id="btn-pin-remove" onclick="App.removePin()">Remove PIN</button>
+    <button class="btn grey wide" onclick="App.closePin()">Cancel</button>
+  </div>
+</div>
+
+<div class="modal" id="delete-modal">
+  <div class="sheet">
+    <h2 id="del-title">Delete?</h2>
+    <p>Type <b id="del-name"></b> to confirm.</p>
+    <input id="del-confirm" oninput="App.updateDeleteButton()" placeholder="Type name" />
+    <div class="row-btns2">
+      <button class="btn grey" onclick="App.closeModal('delete-modal')">Cancel</button>
+      <button class="btn" style="background:#e94f4f;box-shadow:0 6px 0 #b83636" id="btn-delete-confirm" onclick="App.confirmDeleteProfile()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="result-modal">
+  <div class="sheet" id="result-sheet"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================================
+   Chicken Cross — single-file Crossy-Road-style game
+   Modules: Storage · Sfx · Levels · Game (canvas) · App (screens)
+   ========================================================================= */
+(() => {
+"use strict";
+
+/* ---------------------------------------------------------------- Storage */
+const Storage = {
+  _get(k, f) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? f; } catch { return f; } },
+  _set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+
+  getSettings() { return this._get("cc_settings", { sound: true, lastProfile: null }); },
+  saveSettings(s) { this._set("cc_settings", s); },
+
+  getProfiles() { return this._get("cc_profiles", []); },
+  saveProfiles(p) { this._set("cc_profiles", p); },
+
+  blankProgress() { return { coins: 0, best: 0, levels: {}, updated: 0 }; },
+  getProgress(id) { return this._get("cc_progress_" + id, this.blankProgress()); },
+  saveProgress(id, p) { p.updated = Date.now(); this._set("cc_progress_" + id, p); },
+
+  addProfile(name, avatar, pin) {
+    const ps = this.getProfiles();
+    const p = { id: "p" + Date.now() + Math.floor(Math.random()*1e4), name, avatar, pin: pin||null, updated: Date.now() };
+    ps.push(p); this.saveProfiles(ps); return p;
+  },
+  updateProfile(p) { p.updated = Date.now(); this.saveProfiles(this.getProfiles().map(x => x.id===p.id?p:x)); },
+  deleteProfile(id) {
+    this.saveProfiles(this.getProfiles().filter(p => p.id!==id));
+    localStorage.removeItem("cc_progress_" + id);
+    const s = this.getSettings(); if (s.lastProfile===id){ s.lastProfile=null; this.saveSettings(s);}
+  },
+  levelsDone(prog) { return Object.keys(prog.levels).length; },
+  unlockedLevel(prog) { let m=-1; for (const k of Object.keys(prog.levels)) m=Math.max(m,+k); return m+1; },
+  leaderboard() {
+    return this.getProfiles().map(p => {
+      const g = this.getProgress(p.id);
+      return { ...p, best: g.best||0, coins: g.coins||0, done: this.levelsDone(g) };
+    }).sort((a,b) => b.best - a.best || b.done - a.done);
+  },
+};
+
+/* ------------------------------------------------------------------- Sfx  */
+const Sfx = {
+  ctx: null, enabled: true,
+  init() {
+    if (!this.ctx) { const AC = window.AudioContext||window.webkitAudioContext; if (AC) this.ctx = new AC(); }
+    if (this.ctx && this.ctx.state === "suspended") this.ctx.resume();
+  },
+  tone({ freq=440, type="sine", dur=0.15, vol=0.25, when=0, slide=0 }) {
+    if (!this.enabled || !this.ctx) return;
+    const t = this.ctx.currentTime + when;
+    const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq+slide), t+dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t+dur);
+    o.connect(g).connect(this.ctx.destination); o.start(t); o.stop(t+dur+0.05);
+  },
+  noise({ dur=0.3, vol=0.2, when=0 }) {
+    if (!this.enabled || !this.ctx) return;
+    const t = this.ctx.currentTime + when;
+    const n = Math.floor(this.ctx.sampleRate * dur);
+    const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i=0;i<n;i++) d[i] = (Math.random()*2-1) * (1 - i/n);
+    const src = this.ctx.createBufferSource(); src.buffer = buf;
+    const g = this.ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t+dur);
+    src.connect(g).connect(this.ctx.destination); src.start(t);
+  },
+  hop()    { this.tone({ freq: 520, type:"triangle", dur:0.09, vol:0.16, slide:180 }); },
+  coin()   { this.tone({ freq: 990, type:"square", dur:0.06, vol:0.12 });
+             this.tone({ freq: 1320, type:"square", dur:0.16, vol:0.12, when:0.06 }); },
+  squash() { this.noise({ dur:0.18, vol:0.35 }); this.tone({ freq:150, type:"sawtooth", dur:0.25, vol:0.2, slide:-90 }); },
+  splash() { this.noise({ dur:0.35, vol:0.28 }); this.tone({ freq:400, type:"sine", dur:0.3, vol:0.15, slide:-260 }); },
+  bell()   { this.tone({ freq: 1100, type:"square", dur:0.12, vol:0.13 });
+             this.tone({ freq: 1100, type:"square", dur:0.12, vol:0.13, when:0.18 }); },
+  horn()   { this.tone({ freq: 240, type:"sawtooth", dur:0.5, vol:0.22 });
+             this.tone({ freq: 180, type:"sawtooth", dur:0.5, vol:0.18 });
+             this.noise({ dur:0.6, vol:0.12, when:0.05 }); },
+  click()  { this.tone({ freq: 600, type:"sine", dur:0.05, vol:0.1 }); },
+  win()    { const n=[523,659,784,1047,784,1047,1319]; n.forEach((f,i)=>{
+             this.tone({ freq:f, type:"triangle", dur:0.24, vol:0.24, when:i*0.11 });
+             this.tone({ freq:f/2, type:"sine", dur:0.28, vol:0.13, when:i*0.11 }); }); },
+  lose()   { [440,392,349,294].forEach((f,i)=>this.tone({ freq:f, type:"triangle", dur:0.3, vol:0.2, when:i*0.14 })); },
+};
+
+/* ----------------------------------------------------------------- Levels */
+// Worlds -> levels. Each level = target distance + difficulty params + theme.
+const WORLDS = [
+  { name:"Sunny Meadows", emoji:"🌻", accent:"#c8f0a0",
+    theme:{ grassA:"#7ac74f", grassB:"#72bd47", road:"#4b4b55", water:"#3f9be0", bg:"#6bbf4a" },
+    w:{ grass:0.55, road:0.35, water:0.10, rail:0.0 } },
+  { name:"Busy City", emoji:"🏙️", accent:"#cfd6dd",
+    theme:{ grassA:"#8ad39a", grassB:"#7ec98d", road:"#42424c", water:"#3f9be0", bg:"#5a6b60" },
+    w:{ grass:0.35, road:0.48, water:0.05, rail:0.12 } },
+  { name:"Rushing River", emoji:"🌊", accent:"#a9dcf5",
+    theme:{ grassA:"#6fc24d", grassB:"#66b845", road:"#4b4b55", water:"#2f8fd8", bg:"#3f9be0" },
+    w:{ grass:0.30, road:0.22, water:0.43, rail:0.05 } },
+  { name:"Frozen Tracks", emoji:"❄️", accent:"#dff1fb",
+    theme:{ grassA:"#cfe8ef", grassB:"#c3e0e9", road:"#6d7a83", water:"#7fc3e8", bg:"#bfe3f0" },
+    w:{ grass:0.30, road:0.28, water:0.10, rail:0.32 } },
+  { name:"Rush Hour", emoji:"🚦", accent:"#f4c8a0",
+    theme:{ grassA:"#5f8f4a", grassB:"#578442", road:"#38383f", water:"#2f6fa8", bg:"#3a4a3a" },
+    w:{ grass:0.25, road:0.42, water:0.18, rail:0.15 } },
+];
+const LEVELS_PER_WORLD = 4;
+const LEVELS = [];
+WORLDS.forEach((world, wi) => {
+  for (let j=0; j<LEVELS_PER_WORLD; j++) {
+    const gi = LEVELS.length;
+    const diff = wi*LEVELS_PER_WORLD + j;         // 0..19
+    LEVELS.push({
+      gi, world, wi, indexInWorld: j,
+      target: 12 + gi*3,                            // rows to reach
+      params: {
+        weights: world.w,
+        theme: world.theme,
+        carMin: 1.5 + diff*0.10,
+        carMax: 3.0 + diff*0.16,
+        truckChance: 0.22 + Math.min(0.2, diff*0.01),
+        creep: 0.45 + diff*0.035,
+        coinRate: 0.42,
+        railFast: 12 + diff*0.4,
+      },
+    });
+  }
+});
+
+/* ------------------------------------------------------------------- Game */
+const COLS = 9;
+const HOP_TIME = 0.11;
+const REVIVE_COST = 50;
+
+const Game = {
+  canvas: null, ctx: null, W:0, H:0, TILE:60, DPR:1,
+  BASE_Y: 0.64,
+  active:false, running:false,
+  profile:null, progress:null,
+  level:null, mode:"level", target:0, params:null, theme:null,
+  world:null, maxGen:-1, roadStreak:0, waterStreak:0,
+  chick:null, camRow:0, camForced:0, shake:0, elapsed:0,
+  runCoins:0, invince:0, revived:false, dead:false, result:null,
+  inputQueue:null,
+
+  boot() {
+    this.canvas = document.getElementById("c");
+    this.ctx = this.canvas.getContext("2d");
+    this.resize();
+    window.addEventListener("resize", () => this.resize());
+    this.bindInput();
+    requestAnimationFrame((t)=>this.loop(t));
+  },
+
+  resize() {
+    this.DPR = Math.min(window.devicePixelRatio||1, 2);
+    const w = window.innerWidth, h = window.innerHeight;
+    this.canvas.style.width = w+"px"; this.canvas.style.height = h+"px";
+    this.canvas.width = Math.round(w*this.DPR); this.canvas.height = Math.round(h*this.DPR);
+    this.ctx.setTransform(this.DPR,0,0,this.DPR,0,0);
+    this.W=w; this.H=h;
+    // Playfield is COLS tiles wide, centred; on wide screens (iPad landscape,
+    // desktop) the world art extends past it, Crossy-Road style.
+    this.TILE = Math.min(w/COLS, h/11);
+    this.X0 = (w - COLS*this.TILE)/2;
+    this.extC = this.X0/this.TILE + 1.2; // tiles of travel beyond the playfield
+  },
+
+  /* ----- start a game ----- */
+  begin(cfg) {
+    this.profile = App.profile;
+    this.progress = Storage.getProgress(this.profile.id);
+    this.mode = cfg.mode; this.level = cfg.level||null;
+    this.target = cfg.target||0; this.params = cfg.params; this.theme = cfg.params.theme;
+    this.canvas.style.background = this.theme.bg;
+
+    this.world = {}; this.maxGen=-1; this.roadStreak=0; this.waterStreak=0;
+    this.ensureRows(45);
+    this.chick = { col:4, row:0, fromCol:4, fromRow:0, toCol:4, toRow:0, hop:1, maxRow:0 };
+    this.camRow=0; this.camForced=0; this.shake=0; this.elapsed=0;
+    this.runCoins=0; this.invince=0; this.revived=false; this.dead=false; this.result=null;
+    this.inputQueue=null;
+    this.running=true; this.active=true;
+    App.showScreen("game");
+    this.updateHud();
+  },
+
+  /* ----- lane generation ----- */
+  makeLane(row) {
+    if (row <= 3) return { type:"grass", trees:new Set(), coin:null };
+    const w = this.params.weights;
+    let type;
+    const r = Math.random();
+    if (this.roadStreak >= 3) type = r<0.5 ? "grass" : (w.water>0?"water":"grass");
+    else {
+      // weighted pick
+      const roll = Math.random();
+      let acc=0; type="grass";
+      for (const t of ["grass","road","water","rail"]) { acc += w[t]||0; if (roll<=acc){ type=t; break; } }
+    }
+    this.roadStreak = type==="road" ? this.roadStreak+1 : 0;
+    this.waterStreak = type==="water" ? this.waterStreak+1 : 0;
+
+    let lane;
+    if (type==="grass") {
+      const trees = new Set(); const n = irand(0,3); let guard=0;
+      while (trees.size<n && guard++<20) trees.add(irand(0,COLS-1));
+      if (trees.size>=COLS) trees.delete(irand(0,COLS-1));
+      lane = { type:"grass", trees, coin:null };
+    } else if (type==="road") {
+      const dir = Math.random()<0.5?-1:1;
+      const speed = rand(this.params.carMin, this.params.carMax);
+      const kind = Math.random()<this.params.truckChance ? "truck":"car";
+      const width = kind==="truck"?2.0:1.0;
+      const color = pick(CAR_COLORS);
+      // Vehicles loop over the full visible width so nothing pops in mid-screen.
+      const ext = this.extC, loop = COLS + 2*ext;
+      const count = Math.max(2, Math.round(loop / rand(3.4,4.6)));
+      const gap = loop/count, off = rand(0,gap);
+      const cars = [];
+      for (let i=0;i<count;i++) cars.push({ x:i*gap+off-ext, width, kind });
+      lane = { type:"road", dir, speed, color, cars, ext, loop, coin:null };
+    } else if (type==="water") {
+      const dir = Math.random()<0.5?-1:1;
+      const speed = rand(0.9,1.9);
+      const ext = this.extC, loop = COLS + 2*ext;
+      const count = Math.max(2, Math.round(loop / rand(3.6,4.8)));
+      const gap = loop/count, off = rand(0,gap);
+      const logs = [];
+      for (let i=0;i<count;i++) logs.push({ x:i*gap+off-ext, len:irand(2,3) });
+      lane = { type:"water", dir, speed, logs, ext, loop };
+    } else { // rail
+      const dir = Math.random()<0.5?-1:1;
+      lane = { type:"rail", dir, phase:"clear", timer:rand(2.5,5.5),
+               gate:0, blink:0, train:{x:0}, warned:false, coin:null };
+    }
+    // coins on grass / road
+    if ((lane.type==="grass"||lane.type==="road") && Math.random()<this.params.coinRate) {
+      let col = irand(0,COLS-1), guard=0;
+      while (lane.type==="grass" && lane.trees.has(col) && guard++<10) col = irand(0,COLS-1);
+      if (!(lane.type==="grass" && lane.trees.has(col))) lane.coin = { col, taken:false, bob:Math.random()*6 };
+    }
+    return lane;
+  },
+  ensureRows(upTo) { while (this.maxGen<upTo){ this.maxGen++; this.world[this.maxGen]=this.makeLane(this.maxGen); } },
+
+  /* ----- input ----- */
+  bindInput() {
+    const km = { ArrowUp:[0,1],KeyW:[0,1],ArrowDown:[0,-1],KeyS:[0,-1],
+                 ArrowLeft:[-1,0],KeyA:[-1,0],ArrowRight:[1,0],KeyD:[1,0] };
+    window.addEventListener("keydown", e => {
+      if (App.screen!=="game" || !this.running) return;
+      if (e.code==="Space"){ e.preventDefault(); this.move(0,1); return; }
+      const m = km[e.code]; if (m){ e.preventDefault(); this.move(m[0],m[1]); }
+    });
+    // Crossy-Road-style touch: tap = hop forward; a swipe fires the moment the
+    // finger crosses the threshold (during the gesture, not on release).
+    const SWIPE = 18; // px
+    let tp = null;    // { id, x, y, t, fired }
+    const start = (id,x,y) => { Sfx.init(); if (tp) return; tp = { id, x, y, t: performance.now(), fired:false }; };
+    const drag = (id,x,y) => {
+      if (!tp || tp.id !== id || tp.fired) return;
+      const dx = x - tp.x, dy = y - tp.y;
+      if (Math.hypot(dx,dy) < SWIPE) return;
+      tp.fired = true;
+      if (App.screen !== "game" || !this.running) return;
+      if (Math.abs(dx) > Math.abs(dy)) this.move(dx>0?1:-1, 0);
+      else this.move(0, dy<0?1:-1);
+    };
+    const end = (id) => {
+      if (!tp || tp.id !== id) return;
+      const fired = tp.fired, dt = performance.now() - tp.t;
+      tp = null;
+      if (fired) return;
+      if (App.screen === "game" && this.running && dt < 400) this.move(0,1); // tap
+    };
+    const cancel = (id) => { if (tp && tp.id === id) tp = null; };
+    this.canvas.addEventListener("touchstart", e=>{ e.preventDefault(); const t=e.changedTouches[0]; start(t.identifier,t.clientX,t.clientY); }, { passive:false });
+    this.canvas.addEventListener("touchmove",  e=>{ e.preventDefault(); for (const t of e.changedTouches) drag(t.identifier,t.clientX,t.clientY); }, { passive:false });
+    this.canvas.addEventListener("touchend",   e=>{ e.preventDefault(); for (const t of e.changedTouches) end(t.identifier); }, { passive:false });
+    this.canvas.addEventListener("touchcancel",e=>{ for (const t of e.changedTouches) cancel(t.identifier); });
+    // mouse fallback for desktop
+    this.canvas.addEventListener("mousedown", e=>start("m",e.clientX,e.clientY));
+    window.addEventListener("mousemove", e=>drag("m",e.clientX,e.clientY));
+    window.addEventListener("mouseup",   ()=>end("m"));
+    // block iOS pinch-zoom gestures
+    document.addEventListener("gesturestart", e=>e.preventDefault());
+  },
+
+  move(dc,dr) {
+    if (!this.running || this.dead) return;
+    if (this.chick.hop<1){ this.inputQueue=[dc,dr]; return; }
+    this.doMove(dc,dr);
+  },
+  camBottomRow(){ return Math.floor(this.camForced - (this.H*(1-this.BASE_Y))/this.TILE)+1; },
+  doMove(dc,dr) {
+    const base = Math.round(this.chick.col);
+    let tc = clamp(base+dc, 0, COLS-1);
+    let tr = this.chick.row+dr;
+    if (tr<0) tr=0;
+    tr = Math.max(tr, this.camBottomRow());
+    const lane = this.world[tr];
+    if (lane && lane.type==="grass" && lane.trees.has(tc)) return; // blocked
+    const c=this.chick;
+    c.fromCol=c.col; c.fromRow=c.row; c.toCol=tc; c.toRow=tr; c.hop=0;
+    Sfx.hop();
+  },
+
+  /* ----- main loop ----- */
+  loop(now) {
+    let dt = (now-(this._last||now))/1000; this._last=now;
+    if (dt>0.05) dt=0.05;
+    if (this.active) { this.update(dt); this.render(); }
+    else this.ctx.clearRect(0,0,this.W,this.H);
+    requestAnimationFrame(t=>this.loop(t));
+  },
+
+  update(dt) {
+    this.elapsed+=dt;
+    if (this.shake>0) this.shake=Math.max(0,this.shake-dt*2.2);
+    if (this.invince>0) this.invince-=dt;
+
+    // animate hazards near camera even if paused? only when running
+    this.animateHazards(dt, this.camRow);
+
+    if (!this.running) return;
+
+    // camera creep
+    const creep = this.params.creep + Math.min(this.chick.maxRow,200)*0.004;
+    this.camForced += creep*dt;
+
+    const c = this.chick;
+    if (c.hop<1) {
+      c.hop = Math.min(1, c.hop + dt/HOP_TIME);
+      c.col = lerp(c.fromCol,c.toCol,c.hop); c.row = lerp(c.fromRow,c.toRow,c.hop);
+      if (c.hop>=1) {
+        c.col=c.toCol; c.row=c.toRow;
+        if (c.row>c.maxRow){ c.maxRow=c.row; this.updateHud(); this.checkWin(); }
+        if (this.inputQueue){ const q=this.inputQueue; this.inputQueue=null; this.doMove(q[0],q[1]); }
+      }
+    }
+
+    this.ensureRows(Math.ceil(this.camForced)+50);
+    this.camRow = lerp(this.camRow, Math.max(c.row,this.camForced), 1-Math.pow(0.0001,dt));
+
+    if (c.hop>=1 && !this.dead) this.laneEffects(dt);
+
+    // fell behind camera
+    if (!this.dead && c.row < this.camRow - (this.H*this.BASE_Y)/this.TILE - 0.5)
+      this.die("fell");
+  },
+
+  animateHazards(dt, center) {
+    const lo=Math.floor(center-16), hi=Math.ceil(center+22);
+    for (let r=lo;r<=hi;r++){
+      const lane=this.world[r]; if(!lane) continue;
+      if (lane.type==="road") {
+        const M=lane.ext??1.2, L=lane.loop??(COLS+2.4);
+        for (const car of lane.cars){ car.x += lane.dir*lane.speed*dt;
+          if (lane.dir>0 && car.x>COLS+M) car.x-=L;
+          else if (lane.dir<0 && car.x<-M) car.x+=L; }
+      } else if (lane.type==="water") {
+        const M=lane.ext??1.2, L=lane.loop??(COLS+2.4);
+        for (const lg of lane.logs){ lg.x += lane.dir*lane.speed*dt;
+          const span=L+lg.len;
+          if (lane.dir>0 && lg.x-lg.len/2>COLS+M) lg.x-=span;
+          else if (lane.dir<0 && lg.x+lg.len/2<-M) lg.x+=span; }
+      } else if (lane.type==="rail") {
+        this.updateRail(lane, dt, r, center);
+      }
+    }
+  },
+
+  updateRail(lane, dt, row, center) {
+    const visible = this.running && Math.abs(row-center)<13;
+    lane.blink += dt;
+    if (lane.phase==="clear") {
+      lane.gate = Math.max(0, lane.gate - dt*4);
+      lane.timer -= dt;
+      if (lane.timer<=0){ lane.phase="warn"; lane.timer=1.4; lane.warned=false; }
+    } else if (lane.phase==="warn") {
+      lane.gate = Math.min(1, lane.gate + dt*3);
+      lane.timer -= dt;
+      if (visible && !lane.warned){ Sfx.bell(); lane.warned=true; }
+      if (lane.timer<=0){ lane.phase="train";
+        const edge = this.extC + 7; // fully beyond the visible edge (train is 6 tiles)
+        lane.train.x = lane.dir>0 ? -edge : COLS+edge;
+        if (visible) Sfx.horn(); }
+    } else { // train
+      lane.gate = 1;
+      lane.train.x += lane.dir*this.params.railFast*dt;
+      const edge = this.extC + 7;
+      const done = lane.dir>0 ? lane.train.x>COLS+edge : lane.train.x<-edge;
+      if (done){ lane.phase="clear"; lane.timer=rand(3,6.5); }
+    }
+  },
+
+  laneEffects(dt) {
+    const c=this.chick, lane=this.world[c.row];
+    if (!lane) return;
+    // coin pickup
+    if (lane.coin && !lane.coin.taken && Math.round(c.col)===lane.coin.col) {
+      lane.coin.taken=true; this.runCoins++; this.progress.coins++;
+      Storage.saveProgress(this.profile.id, this.progress); Sfx.coin(); this.updateHud();
+    }
+    if (this.invince>0) return;
+    if (lane.type==="road") {
+      for (const car of lane.cars){ if (Math.abs(car.x-c.col) < car.width/2+0.42){ this.die("car"); return; } }
+    } else if (lane.type==="water") {
+      let log=null;
+      for (const lg of lane.logs){ if (c.col>lg.x-lg.len/2-0.05 && c.col<lg.x+lg.len/2+0.05){ log=lg; break; } }
+      if (log){ c.col += lane.dir*lane.speed*dt; if (c.col<-0.35||c.col>COLS-0.65) this.die("fell"); }
+      else this.die("water");
+    } else if (lane.type==="rail") {
+      if (lane.phase==="train" && Math.abs(lane.train.x - c.col) < 3) this.die("train");
+    }
+  },
+
+  checkWin() {
+    if (this.mode==="level" && !this.dead && this.chick.maxRow >= this.target) this.win();
+  },
+
+  win() {
+    this.running=false;
+    if (this.chick.maxRow>this.progress.best){ this.progress.best=this.chick.maxRow; }
+    // stars: complete=1, +1 if >=5 coins this run, +1 if >=10
+    let stars=1; if (this.runCoins>=5) stars++; if (this.runCoins>=10) stars++;
+    const gi=this.level.gi, prev=this.progress.levels[gi];
+    if (!prev || stars>prev.stars) this.progress.levels[gi]={ stars, coins:this.runCoins };
+    else this.progress.levels[gi]=prev;
+    Storage.saveProgress(this.profile.id, this.progress);
+    Sfx.win();
+    this.result={ type:"win", stars, coins:this.runCoins };
+    setTimeout(()=>App.showResult(this.result), 500);
+  },
+
+  die(reason) {
+    if (this.dead) return;
+    this.dead=true; this.running=false; this.shake=1;
+    this.deathReason=reason;
+    if (reason==="water"||reason==="fell") Sfx.splash(); else Sfx.squash();
+    Sfx.lose();
+    if (this.chick.maxRow>this.progress.best){ this.progress.best=this.chick.maxRow;
+      Storage.saveProgress(this.profile.id, this.progress); }
+    this.result={ type:"lose", reason, dist:this.chick.maxRow, coins:this.runCoins };
+    setTimeout(()=>App.showResult(this.result), 650);
+  },
+
+  revive() {
+    if (this.progress.coins < REVIVE_COST) return false;
+    this.progress.coins -= REVIVE_COST;
+    Storage.saveProgress(this.profile.id, this.progress);
+    // find a safe grass row at/just below current
+    const c=this.chick; let sr=Math.floor(c.row);
+    for (let r=sr; r>=Math.max(0,sr-6); r--){ if (this.world[r] && this.world[r].type==="grass"){ sr=r; break; } }
+    c.row=sr; c.maxRow=Math.max(c.maxRow,sr); c.col=clamp(Math.round(c.col),0,COLS-1);
+    c.hop=1; c.fromRow=c.toRow=sr; c.fromCol=c.toCol=c.col;
+    this.dead=false; this.running=true; this.invince=2.2; this.revived=true;
+    App.closeModal("result-modal"); this.updateHud();
+    return true;
+  },
+
+  exitToMap() {
+    this.running=false; this.active=false;
+    App.closeModal("result-modal");
+    App.showMap();
+  },
+
+  updateHud() {
+    const prog = document.getElementById("g-progress");
+    if (this.mode==="level") prog.textContent = `${this.chick.maxRow} / ${this.target}`;
+    else prog.textContent = `${this.chick.maxRow} m`;
+    document.getElementById("g-coins").textContent = "🪙 " + (this.progress ? this.progress.coins : 0);
+  },
+
+  /* ----- render ----- */
+  screen(col,row){ const x=this.X0+(col+0.5)*this.TILE, y=this.H*this.BASE_Y-(row-this.camRow)*this.TILE; return [x,y]; },
+
+  render() {
+    const ctx=this.ctx, TILE=this.TILE;
+    ctx.save();
+    if (this.shake>0){ const s=this.shake*10; ctx.translate((Math.random()-0.5)*s,(Math.random()-0.5)*s); }
+    ctx.clearRect(-20,-20,this.W+40,this.H+40);
+    ctx.fillStyle=this.theme.bg; ctx.fillRect(-20,-20,this.W+40,this.H+40);
+
+    const lo=Math.floor(this.camRow-(this.H*this.BASE_Y)/TILE)-2;
+    const hi=Math.ceil(this.camRow+(this.H*(1-this.BASE_Y))/TILE)+2;
+    for (let r=hi;r>=lo;r--){ if (r>this.maxGen) this.ensureRows(r);
+      this.drawLane(r, this.world[r]); }
+    this.drawChick();
+    // darken the world beyond the playfield edges (Crossy-Road style)
+    if (this.X0 > 2) {
+      const g1=ctx.createLinearGradient(0,0,this.X0,0);
+      g1.addColorStop(0,"rgba(0,0,0,0.35)"); g1.addColorStop(1,"rgba(0,0,0,0)");
+      ctx.fillStyle=g1; ctx.fillRect(0,-20,this.X0,this.H+40);
+      const g2=ctx.createLinearGradient(this.W,0,this.W-this.X0,0);
+      g2.addColorStop(0,"rgba(0,0,0,0.35)"); g2.addColorStop(1,"rgba(0,0,0,0)");
+      ctx.fillStyle=g2; ctx.fillRect(this.W-this.X0,-20,this.X0,this.H+40);
+    }
+    ctx.restore();
+  },
+
+  drawLane(row, lane) {
+    const ctx=this.ctx, TILE=this.TILE, th=this.theme;
+    const [,cy]=this.screen(0,row), top=cy-TILE/2;
+    if (row<0 || !lane){ ctx.fillStyle="#2a6db0"; ctx.fillRect(0,top,this.W,TILE+1); return; }
+
+    if (lane.type==="grass") {
+      ctx.fillStyle = (row%2===0)?th.grassA:th.grassB; ctx.fillRect(0,top,this.W,TILE+1);
+      ctx.fillStyle="rgba(255,255,255,0.04)"; ctx.fillRect(0,top,this.W,3);
+      // dense decorative forest beyond the playfield (wide screens)
+      const ext = Math.ceil(this.X0/TILE);
+      for (let i=1;i<=ext;i++) for (const col of [-i, COLS-1+i]) {
+        const h = hash2(row,col);
+        if (h < 0.55) { const [x,y]=this.screen(col,row); this.drawTree(x,y,h<0.12); }
+      }
+      for (const col of lane.trees){ const [x,y]=this.screen(col,row); this.drawTree(x,y,(col*7+row)%3===0); }
+    } else if (lane.type==="road") {
+      ctx.fillStyle=th.road; ctx.fillRect(0,top,this.W,TILE+1);
+      ctx.fillStyle="rgba(255,255,255,0.5)"; const dy=top+TILE/2-2;
+      for (let x=0;x<this.W;x+=TILE) ctx.fillRect(x+TILE*0.25,dy,TILE*0.4,4);
+      ctx.fillStyle="rgba(0,0,0,0.18)"; ctx.fillRect(0,top,this.W,4);
+      for (const car of lane.cars) this.drawCar(car,lane,row);
+    } else if (lane.type==="water") {
+      ctx.fillStyle=(row%2===0)?th.water:shade(th.water,-8); ctx.fillRect(0,top,this.W,TILE+1);
+      ctx.fillStyle="rgba(255,255,255,0.06)"; ctx.fillRect(0,top+6,this.W,3);
+      for (const lg of lane.logs) this.drawLog(lg,row);
+    } else if (lane.type==="rail") {
+      this.drawRail(lane,row,top);
+    }
+    if (lane.coin && !lane.coin.taken) this.drawCoin(lane.coin, row);
+  },
+
+  drawTree(x,y,rock) {
+    const ctx=this.ctx, T=this.TILE;
+    ctx.fillStyle="rgba(0,0,0,0.15)"; ctx.beginPath(); ctx.ellipse(x,y+T*0.3,T*0.3,T*0.13,0,0,7); ctx.fill();
+    if (rock){ ctx.fillStyle="#9aa1a8"; rr(ctx,x-T*0.26,y-T*0.18,T*0.52,T*0.5,8); ctx.fill();
+      ctx.fillStyle="#b5bcc2"; rr(ctx,x-T*0.2,y-T*0.22,T*0.3,T*0.22,6); ctx.fill(); return; }
+    ctx.fillStyle="#7a4a1e"; ctx.fillRect(x-T*0.07,y-T*0.05,T*0.14,T*0.35);
+    ctx.fillStyle="#3f8f3a"; rr(ctx,x-T*0.3,y-T*0.6,T*0.6,T*0.62,12); ctx.fill();
+    ctx.fillStyle="#4aa544"; rr(ctx,x-T*0.24,y-T*0.66,T*0.4,T*0.4,10); ctx.fill();
+  },
+  drawCar(car,lane,row) {
+    const ctx=this.ctx, T=this.TILE, [x,y]=this.screen(car.x,row);
+    const w=car.width*T*0.9, h=T*0.62;
+    ctx.fillStyle="rgba(0,0,0,0.22)"; rr(ctx,x-w/2+4,y-h/2+6,w,h,10); ctx.fill();
+    ctx.fillStyle=lane.color; rr(ctx,x-w/2,y-h/2,w,h,10); ctx.fill();
+    ctx.fillStyle="rgba(255,255,255,0.22)";
+    const cw=car.kind==="truck"?w*0.35:w*0.5, cx=lane.dir>=0?x-w/2+w*0.08:x+w/2-w*0.08-cw;
+    rr(ctx,cx,y-h/2+5,cw,h*0.45,6); ctx.fill();
+    ctx.fillStyle="rgba(120,190,240,0.85)"; rr(ctx,cx+3,y-h/2+8,cw-6,h*0.3,4); ctx.fill();
+    ctx.fillStyle="#fff4c2"; const lx=lane.dir>=0?x+w/2-5:x-w/2+1;
+    ctx.fillRect(lx,y-h*0.28,4,5); ctx.fillRect(lx,y+h*0.18,4,5);
+  },
+  drawLog(lg,row) {
+    const ctx=this.ctx, T=this.TILE, [x,y]=this.screen(lg.x,row);
+    const w=lg.len*T*0.94, h=T*0.56;
+    ctx.fillStyle="rgba(0,0,0,0.14)"; rr(ctx,x-w/2+3,y-h/2+5,w,h,h/2); ctx.fill();
+    ctx.fillStyle="#8a5a2b"; rr(ctx,x-w/2,y-h/2,w,h,h/2); ctx.fill();
+    ctx.fillStyle="#734a22";
+    for (let i=1;i<lg.len;i++){ const gx=x-w/2+w*i/lg.len; ctx.fillRect(gx-1.5,y-h/2+4,3,h-8); }
+    ctx.fillStyle="#c79a5f";
+    ctx.beginPath(); ctx.ellipse(x-w/2+6,y,5,h*0.32,0,0,7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x+w/2-6,y,5,h*0.32,0,0,7); ctx.fill();
+  },
+  drawRail(lane,row,top) {
+    const ctx=this.ctx, T=this.TILE, W=this.W;
+    ctx.fillStyle="#5a5148"; ctx.fillRect(0,top,W,T+1);
+    // sleepers
+    ctx.fillStyle="#6f6458"; for (let x=0;x<W;x+=T*0.5) ctx.fillRect(x+4,top+8,T*0.32,T-16);
+    // rails
+    ctx.fillStyle="#c9ccd2"; ctx.fillRect(0,top+T*0.32,W,4); ctx.fillRect(0,top+T*0.62,W,4);
+    // train
+    if (lane.phase==="train"){ const [x,y]=this.screen(lane.train.x,row);
+      const w=6*T, h=T*0.8;
+      ctx.fillStyle="rgba(0,0,0,0.28)"; rr(ctx,x-w/2+5,y-h/2+6,w,h,10); ctx.fill();
+      ctx.fillStyle="#c0392b"; rr(ctx,x-w/2,y-h/2,w,h,10); ctx.fill();
+      ctx.fillStyle="#e2554a"; ctx.fillRect(x-w/2,y-h/2,w,6);
+      ctx.fillStyle="#ffe08a";
+      for (let i=0;i<6;i++) rr(ctx,x-w/2+18+i*(w-36)/6,y-h*0.28,(w-36)/6-8,h*0.32,4), ctx.fill();
+      // front light
+      ctx.fillStyle="#fff6c8"; const fx=lane.dir>0?x+w/2-6:x-w/2+2; ctx.fillRect(fx,y-6,5,12);
+    }
+    // warning lights + gates
+    const on = (lane.phase==="warn"||lane.phase==="train");
+    const flash = on && (Math.floor(lane.blink*6)%2===0);
+    [-1,1].forEach(side=>{
+      const gx = side<0 ? this.X0+T*0.5 : this.X0+COLS*T-T*0.5;
+      // pole
+      ctx.fillStyle="#333"; ctx.fillRect(gx-3, top+2, 6, T*0.5);
+      // lamp
+      ctx.beginPath(); ctx.arc(gx, top+8, 6, 0, 7);
+      ctx.fillStyle = flash ? "#ff2d2d" : (on?"#7a1414":"#801a1a"); ctx.fill();
+      // gate arm rotating down
+      const a = lane.gate * (Math.PI/2); // 0 up -> down
+      ctx.save(); ctx.translate(gx, top+T*0.5);
+      ctx.rotate(side<0 ? a : -a);
+      const len = T*1.6;
+      ctx.fillStyle="#fff"; rr(ctx,0,-4, side<0?len:0, 8, 3);
+      // draw arm toward center
+      ctx.fillStyle="#e23b3b";
+      for (let i=0;i<5;i++){ const seg=len/5; const sx=(side<0? i*seg : -(i+1)*seg);
+        ctx.fillStyle = i%2===0 ? "#e23b3b":"#ffffff"; rr(ctx,sx,-4,seg,8,2); ctx.fill(); }
+      ctx.restore();
+    });
+  },
+  drawCoin(coin,row) {
+    const ctx=this.ctx, T=this.TILE, [x,y0]=this.screen(coin.col,row);
+    const bob=Math.sin(this.elapsed*4+coin.bob)*3, y=y0+bob;
+    ctx.fillStyle="rgba(0,0,0,0.18)"; ctx.beginPath(); ctx.ellipse(x,y0+T*0.28,T*0.16,T*0.07,0,0,7); ctx.fill();
+    ctx.fillStyle="#f6c531"; ctx.beginPath(); ctx.arc(x,y,T*0.2,0,7); ctx.fill();
+    ctx.fillStyle="#ffe58a"; ctx.beginPath(); ctx.arc(x,y,T*0.14,0,7); ctx.fill();
+    ctx.fillStyle="#d99a1a"; ctx.font=`900 ${T*0.22}px system-ui`; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText("★",x,y+1);
+  },
+  drawChick() {
+    const ctx=this.ctx, T=this.TILE, c=this.chick;
+    const [x,yBase]=this.screen(c.col,c.row);
+    const arc = c.hop<1 ? Math.sin(Math.PI*c.hop) : 0;
+    let y = yBase - arc*T*0.42, sx=1, sy=1;
+    if (c.hop<1){ sy=1+arc*0.18; sx=1-arc*0.12; }
+    if (this.dead){ const t=Math.min(1,(performance.now()-(this._deadAt||(this._deadAt=performance.now())))/300);
+      sy=1-t*0.7; sx=1+t*0.5; y=yBase; }
+    if (!this.dead) this._deadAt=0;
+    const s=T*0.5;
+    // shadow
+    ctx.fillStyle="rgba(0,0,0,0.2)"; ctx.beginPath();
+    ctx.ellipse(x,yBase+s*0.42,s*0.42*(1+arc*0.15),s*0.18,0,0,7); ctx.fill();
+    // invincible blink
+    if (this.invince>0 && Math.floor(this.invince*10)%2===0){ return; }
+    ctx.save(); ctx.translate(x,y); ctx.scale(sx,sy);
+    ctx.strokeStyle="#f0a500"; ctx.lineWidth=Math.max(2,s*0.09); ctx.lineCap="round";
+    ctx.beginPath(); ctx.moveTo(-s*0.14,s*0.34); ctx.lineTo(-s*0.14,s*0.46);
+    ctx.moveTo(s*0.14,s*0.34); ctx.lineTo(s*0.14,s*0.46); ctx.stroke();
+    ctx.fillStyle="#fff"; rr(ctx,-s*0.4,-s*0.28,s*0.8,s*0.66,s*0.28); ctx.fill();
+    ctx.fillStyle="rgba(0,0,0,0.06)"; rr(ctx,-s*0.4,0,s*0.8,s*0.38,s*0.24); ctx.fill();
+    ctx.fillStyle="#fff"; rr(ctx,-s*0.26,-s*0.5,s*0.52,s*0.4,s*0.2); ctx.fill();
+    ctx.fillStyle="#e8403a"; ctx.beginPath(); ctx.arc(-s*0.06,-s*0.52,s*0.09,0,7); ctx.arc(s*0.06,-s*0.55,s*0.09,0,7); ctx.fill();
+    rr(ctx,-s*0.03,-s*0.2,s*0.08,s*0.12,3); ctx.fill();
+    ctx.fillStyle="#f0a500"; ctx.beginPath(); ctx.moveTo(s*0.2,-s*0.34); ctx.lineTo(s*0.42,-s*0.28); ctx.lineTo(s*0.2,-s*0.22); ctx.closePath(); ctx.fill();
+    ctx.fillStyle="#222"; ctx.beginPath(); ctx.arc(s*0.02,-s*0.36,s*0.05,0,7); ctx.fill(); ctx.beginPath(); ctx.arc(s*0.16,-s*0.36,s*0.05,0,7); ctx.fill();
+    if (this.dead){ ctx.strokeStyle="#222"; ctx.lineWidth=s*0.05; ctx.beginPath();
+      ctx.moveTo(-s*0.02,-s*0.4); ctx.lineTo(s*0.06,-s*0.32); ctx.moveTo(s*0.06,-s*0.4); ctx.lineTo(-s*0.02,-s*0.32);
+      ctx.moveTo(s*0.12,-s*0.4); ctx.lineTo(s*0.2,-s*0.32); ctx.moveTo(s*0.2,-s*0.4); ctx.lineTo(s*0.12,-s*0.32); ctx.stroke(); }
+    ctx.restore();
+  },
+};
+
+/* -------------------------------------------------------------------- App */
+const AVATARS = ["🐔","🐤","🦆","🐧","🦉","🦩","🐓","🦜","🐥","🦚","🦢","🕊️"];
+const ADMIN_PIN = "7777";
+
+const App = {
+  profile:null, screen:"splash",
+  el(id){ return document.getElementById(id); },
+
+  init() {
+    const s = Storage.getSettings(); Sfx.enabled = s.sound; this.updateSoundBtn();
+    Game.boot();
+    this.el("lb-back").onclick = () => this.showScreen(this.profile?"map":"splash");
+  },
+
+  showScreen(name) {
+    document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+    this.el("screen-"+name).classList.add("active");
+    this.screen = name;
+    Game.active = (name==="game");
+  },
+
+  play() { Sfx.init(); Sfx.click(); this.renderProfiles(); this.showScreen("profiles"); },
+
+  /* ----- profiles ----- */
+  renderProfiles() {
+    const wrap=this.el("profile-list"); wrap.innerHTML="";
+    for (const p of Storage.getProfiles()) {
+      const g=Storage.getProgress(p.id);
+      const d=document.createElement("div"); d.className="profile-card";
+      d.innerHTML=`<span class="avatar">${p.avatar}</span>
+        <span class="pname">${esc(p.name)}</span>
+        <span class="pmeta">🏁 best ${g.best} · 🪙 ${g.coins} · 🗺️ ${Storage.levelsDone(g)}/${LEVELS.length}</span>
+        <span class="row-btns"><button class="ppin">${p.pin?"🔒":"🔓"}</button><button class="pdelete">🗑️</button></span>`;
+      d.onclick=()=>this.selectProfile(p);
+      d.querySelector(".pdelete").onclick=e=>this.askDelete(p,e);
+      d.querySelector(".ppin").onclick=e=>this.managePin(p,e);
+      wrap.appendChild(d);
+    }
+    const add=document.createElement("div"); add.className="profile-card add";
+    add.innerHTML=`<span class="avatar">➕</span><span class="pname">New Player</span>`;
+    add.onclick=()=>this.showNewProfile(); wrap.appendChild(add);
+  },
+  selectProfile(p) {
+    Sfx.click();
+    if (p.pin) this.openPin({ title:`${p.avatar} ${esc(p.name)} is locked`, sub:"Enter the 4-digit PIN",
+      mode:"verify", profile:p, onSuccess:()=>this.enterProfile(p) });
+    else this.enterProfile(p);
+  },
+  enterProfile(p) { this.profile=p; const s=Storage.getSettings(); s.lastProfile=p.id; Storage.saveSettings(s); this.showMap(); },
+
+  showNewProfile() {
+    Sfx.click();
+    const grid=this.el("avatar-grid"); grid.innerHTML="";
+    AVATARS.forEach((a,i)=>{ const b=document.createElement("button");
+      b.className="avatar-choice"+(i===0?" selected":""); b.textContent=a;
+      b.onclick=()=>{ grid.querySelectorAll(".selected").forEach(n=>n.classList.remove("selected")); b.classList.add("selected"); Sfx.click(); };
+      grid.appendChild(b); });
+    this.el("new-name").value=""; this.el("new-pin").value="";
+    this.openModal("new-profile-modal"); this.el("new-name").focus();
+  },
+  createProfile() {
+    const name=this.el("new-name").value.trim(); if(!name){ this.el("new-name").focus(); return; }
+    const pin=this.el("new-pin").value.trim(); if(pin && !/^\d{4}$/.test(pin)){ this.el("new-pin").focus(); return; }
+    const avatar=document.querySelector(".avatar-choice.selected")?.textContent||AVATARS[0];
+    const p=Storage.addProfile(name.slice(0,14),avatar,pin||null);
+    this.closeModal("new-profile-modal"); Sfx.win(); this.enterProfile(p);
+  },
+  askDelete(p,e) {
+    e.stopPropagation(); Sfx.click();
+    const go=()=>{ this._del=p; this.el("del-title").textContent=`Delete ${p.avatar} ${p.name}?`;
+      this.el("del-name").textContent=p.name; this.el("del-confirm").value="";
+      this.el("btn-delete-confirm").disabled=true; this.openModal("delete-modal"); this.el("del-confirm").focus(); };
+    if (p.pin) this.openPin({ title:`${esc(p.name)} is PIN protected`, sub:"Enter PIN to delete", mode:"verify", profile:p, onSuccess:go });
+    else go();
+  },
+  updateDeleteButton(){ const t=this.el("del-confirm").value.trim().toLowerCase();
+    this.el("btn-delete-confirm").disabled = t !== (this._del?.name||"").toLowerCase(); },
+  confirmDeleteProfile(){ const p=this._del; if(!p) return;
+    if (this.el("del-confirm").value.trim().toLowerCase()!==p.name.toLowerCase()) return;
+    Storage.deleteProfile(p.id); if (this.profile?.id===p.id) this.profile=null;
+    this._del=null; this.closeModal("delete-modal"); Sfx.lose(); this.renderProfiles(); },
+
+  /* ----- PIN ----- */
+  openPin(ctx) {
+    this._pin={ digits:"", ...ctx };
+    this.el("pin-title").innerHTML=ctx.title; this.el("pin-sub").textContent=ctx.sub||"";
+    this.el("btn-pin-remove").style.display = ctx.allowRemove?"":"none";
+    const pad=this.el("pin-pad");
+    if (!pad.dataset.built){ pad.dataset.built="1";
+      ["1","2","3","4","5","6","7","8","9","","0","⌫"].forEach(k=>{ const b=document.createElement("button");
+        b.className="pin-key"+(k===""?" blank":""); b.textContent=k; if(k!=="") b.onclick=()=>this.pinKey(k); pad.appendChild(b); }); }
+    this.renderPinDots(); this.openModal("pin-modal");
+  },
+  closePin(){ this._pin=null; this.closeModal("pin-modal"); },
+  renderPinDots(){ const n=this._pin?this._pin.digits.length:0;
+    [...this.el("pin-dots").children].forEach((d,i)=>d.classList.toggle("on",i<n)); },
+  pinKey(k){ if(!this._pin) return; Sfx.click();
+    if (k==="⌫") this._pin.digits=this._pin.digits.slice(0,-1);
+    else if (this._pin.digits.length<4) this._pin.digits+=k;
+    this.renderPinDots();
+    if (this._pin.digits.length===4) setTimeout(()=>this.pinDone(),120); },
+  pinDone(){ if(!this._pin) return; const { digits,mode,profile,onSuccess }=this._pin;
+    if (mode==="verify"){ if (digits===profile.pin || digits===ADMIN_PIN){ Sfx.win(); this.closePin(); onSuccess(); }
+      else { Sfx.lose(); const d=this.el("pin-dots"); d.classList.add("shake");
+        setTimeout(()=>{ d.classList.remove("shake"); if(this._pin){ this._pin.digits=""; this.renderPinDots(); } },450); } }
+    else { profile.pin=digits; Storage.updateProfile(profile); Sfx.win(); this.closePin(); this.renderProfiles(); } },
+  managePin(p,e){ e.stopPropagation(); Sfx.click();
+    const set=()=>this.openPin({ title:`${p.pin?"New":"Set a"} PIN for ${p.avatar} ${esc(p.name)}`, sub:"Tap 4 digits", mode:"set", profile:p, allowRemove:!!p.pin });
+    if (p.pin) this.openPin({ title:`Change ${esc(p.name)}'s PIN`, sub:"Enter current PIN first", mode:"verify", profile:p, onSuccess:set });
+    else set(); },
+  removePin(){ if(!this._pin?.profile) return; this._pin.profile.pin=null; Storage.updateProfile(this._pin.profile); Sfx.click(); this.closePin(); this.renderProfiles(); },
+
+  /* ----- map ----- */
+  showMap() {
+    if (!this.profile) return this.play();
+    const g=Storage.getProgress(this.profile.id), unlocked=Storage.unlockedLevel(g);
+    this.el("map-player").innerHTML=`${this.profile.avatar} ${esc(this.profile.name)}
+      <span class="pmeta">🪙 ${g.coins} · 🏁 ${g.best}</span>`;
+    const wrap=this.el("world-list"); wrap.innerHTML="";
+    WORLDS.forEach((world,wi)=>{
+      const start=wi*LEVELS_PER_WORLD;
+      const done=LEVELS.slice(start,start+LEVELS_PER_WORLD).filter(l=>g.levels[l.gi]).length;
+      const wUnlocked = start<=unlocked;
+      const card=document.createElement("div"); card.className="world-card"+(wUnlocked?"":" locked");
+      card.style.setProperty("--wa", world.accent);
+      const dots=[];
+      for (let j=0;j<LEVELS_PER_WORLD;j++){ const gi=start+j; const lv=LEVELS[gi];
+        const rec=g.levels[gi];
+        const cls = rec?"done":(gi===unlocked?"next":(gi<unlocked?"done":"locked"));
+        const label = rec ? "★".repeat(rec.stars) : (gi<=unlocked?"▶":"🔒");
+        dots.push(`<button class="lvl-dot ${cls}" data-gi="${gi}" ${gi>unlocked?"disabled":""}>${label}<small>${lv.target}m</small></button>`);
+      }
+      card.innerHTML=`<div class="world-head"><span class="world-emoji">${world.emoji}</span>
+        <div><div class="world-name">${world.name}</div>
+        <div class="world-tag">${wUnlocked?"Reach the far side!":"Finish earlier worlds to unlock"}</div></div>
+        <span class="world-count">${done}/${LEVELS_PER_WORLD}</span></div>
+        <div class="dots">${dots.join("")}</div>`;
+      wrap.appendChild(card);
+    });
+    wrap.querySelectorAll(".lvl-dot:not([disabled])").forEach(b=>{
+      b.onclick=()=>{ Sfx.click(); this.startLevel(+b.dataset.gi); };
+    });
+    this.showScreen("map");
+  },
+
+  startLevel(gi) {
+    const lv=LEVELS[gi];
+    Game.begin({ mode:"level", level:lv, target:lv.target, params:lv.params });
+  },
+  startEndless() {
+    Sfx.click();
+    // hardest params for a proper endless challenge
+    const params={ weights:{ grass:0.32, road:0.40, water:0.16, rail:0.12 },
+      theme:WORLDS[4].theme, carMin:2.0, carMax:4.2, truckChance:0.3, creep:0.6, coinRate:0.4, railFast:15 };
+    Game.begin({ mode:"endless", params, target:0 });
+  },
+
+  /* ----- result modal ----- */
+  showResult(res) {
+    const sheet=this.el("result-sheet");
+    if (res.type==="win") {
+      const next = Game.level.gi+1;
+      const hasNext = next<LEVELS.length;
+      sheet.innerHTML=`<h2>${Game.level.world.emoji} Level Complete!</h2>
+        <div class="stars">${"★".repeat(res.stars)}${"☆".repeat(3-res.stars)}</div>
+        <p>🪙 ${res.coins} coins collected</p>
+        <div class="row-btns2">
+          <button class="btn grey" id="r-map">🗺️ Map</button>
+          <button class="btn blue" id="r-retry">↻ Retry</button>
+          ${hasNext?`<button class="btn green" id="r-next">Next ▶</button>`:``}
+        </div>`;
+      this.openModal("result-modal");
+      this.el("r-map").onclick=()=>{ Sfx.click(); Game.exitToMap(); };
+      this.el("r-retry").onclick=()=>{ Sfx.click(); this.startLevel(Game.level.gi); };
+      if (hasNext) this.el("r-next").onclick=()=>{ Sfx.click(); this.startLevel(next); };
+    } else {
+      const reason = { car:"🚗 Squashed!", train:"🚂 Flattened by a train!", water:"💦 Splash!", fell:"🌀 Swept away!" }[res.reason]||"Game Over";
+      const g=Storage.getProgress(this.profile.id);
+      const canRevive = Game.mode!=="level" ? g.coins>=REVIVE_COST : g.coins>=REVIVE_COST;
+      sheet.innerHTML=`<h2>${reason}</h2>
+        <div class="bigscore">${res.dist} m</div>
+        <p>🏁 Best: ${g.best} m · 🪙 ${res.coins} this run</p>
+        <div class="row-btns2">
+          <button class="btn grey" id="r-map">🗺️ Map</button>
+          <button class="btn blue" id="r-retry">↻ Retry</button>
+        </div>
+        ${canRevive?`<button class="btn green wide" id="r-revive" style="margin-top:10px">💛 Continue for 🪙${REVIVE_COST}</button>`:``}`;
+      this.openModal("result-modal");
+      this.el("r-map").onclick=()=>{ Sfx.click(); Game.exitToMap(); };
+      this.el("r-retry").onclick=()=>{ Sfx.click();
+        if (Game.mode==="level") this.startLevel(Game.level.gi); else this.startEndless(); };
+      if (canRevive) this.el("r-revive").onclick=()=>{ Sfx.click(); if(!Game.revive()) this.toast("Not enough coins"); };
+    }
+  },
+
+  /* ----- leaderboard ----- */
+  showLeaderboard() {
+    Sfx.init(); Sfx.click();
+    const rows=Storage.leaderboard(), wrap=this.el("lb-rows"); wrap.innerHTML="";
+    const medals=["🥇","🥈","🥉"];
+    rows.forEach((r,i)=>{ const d=document.createElement("div");
+      d.className="lb-row"+(this.profile&&r.id===this.profile.id?" me":"");
+      d.innerHTML=`<span class="lb-rank">${medals[i]||(i+1)}</span>
+        <span class="lb-avatar">${r.avatar}</span>
+        <span class="lb-name">${esc(r.name)}</span>
+        <span class="lb-stat">🗺️ ${r.done}</span>
+        <span class="lb-stat">🏁 ${r.best}m · 🪙 ${r.coins}</span>`;
+      wrap.appendChild(d); });
+    if (!rows.length) wrap.innerHTML=`<div class="lb-empty">No players yet — tap Play to begin!</div>`;
+    this.showScreen("leaderboard");
+  },
+
+  /* ----- misc ----- */
+  openModal(id){ this.el(id).classList.add("visible"); },
+  closeModal(id){ this.el(id).classList.remove("visible"); },
+  toggleSound(){ Sfx.enabled=!Sfx.enabled; const s=Storage.getSettings(); s.sound=Sfx.enabled; Storage.saveSettings(s); this.updateSoundBtn(); Sfx.click(); },
+  updateSoundBtn(){ document.querySelectorAll(".btn-sound").forEach(b=>b.textContent=Sfx.enabled?"🔊":"🔇"); },
+  toast(msg){ const t=this.el("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(this._tt); this._tt=setTimeout(()=>t.classList.remove("show"),1600); },
+};
+
+/* --------------------------------------------------------------- helpers */
+const CAR_COLORS=["#e94f4f","#f0a53b","#4f7fe9","#8e4fe9","#3bc4b0","#e94f9d","#f2d13b"];
+function rand(a,b){ return a+Math.random()*(b-a); }
+function irand(a,b){ return Math.floor(rand(a,b+1)); }
+function pick(a){ return a[irand(0,a.length-1)]; }
+function clamp(v,a,b){ return v<a?a:v>b?b:v; }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function esc(s){ return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function hash2(r,c){ let n=(r*374761393 + c*668265263)|0; n=Math.imul(n^(n>>>13),1274126177); return ((n^(n>>>16))>>>0)/4294967296; }
+function rr(ctx,x,y,w,h,r){ r=Math.min(r,Math.abs(w)/2,Math.abs(h)/2); ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function shade(hex,amt){ const n=parseInt(hex.slice(1),16);
+  let r=(n>>16)+amt, g=((n>>8)&255)+amt, b=(n&255)+amt;
+  r=clamp(r,0,255); g=clamp(g,0,255); b=clamp(b,0,255);
+  return "#"+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1); }
+
+// expose for inline handlers
+window.App=App; window.Game=Game;
+window.addEventListener("DOMContentLoaded", ()=>App.init());
+})();
+</script>
