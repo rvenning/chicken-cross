@@ -441,6 +441,7 @@ const Game = {
     this.runCoins=0; this.invince=0; this.revived=false; this.dead=false; this.result=null;
     this.inputQueue=null;
     this.running=true; this.active=true;
+    App.closeModal("result-modal");
     App.showScreen("game");
     this.updateHud();
   },
