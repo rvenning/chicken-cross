@@ -662,9 +662,8 @@ const Game = {
       ctx.fillStyle="rgba(0,0,0,0.18)"; ctx.fillRect(0,top,this.W,4);
       for (const car of lane.cars) this.drawCar(car,lane,row);
     } else if (lane.type==="water") {
-      ctx.fillStyle=(row%2===0)?th.water:shade(th.water,-8); ctx.fillRect(0,top,this.W,TILE+1);
-      ctx.fillStyle="rgba(255,255,255,0.06)"; ctx.fillRect(0,top+6,this.W,3);
-      for (const lg of lane.logs) this.drawLog(lg,row);
+      this.drawWater(lane,row,top);
+      for (const lg of lane.logs) this.drawLog(lg,row,lane);
     } else if (lane.type==="rail") {
       this.drawRail(lane,row,top);
     }
@@ -692,9 +691,54 @@ const Game = {
     ctx.fillStyle="#fff4c2"; const lx=lane.dir>=0?x+w/2-5:x-w/2+1;
     ctx.fillRect(lx,y-h*0.28,4,5); ctx.fillRect(lx,y+h*0.18,4,5);
   },
-  drawLog(lg,row) {
-    const ctx=this.ctx, T=this.TILE, [x,y]=this.screen(lg.x,row);
+  // Whole water lanes bob in phase so logs and their rider move as one unit.
+  waterBob(row) { return Math.sin(this.elapsed*2.2 + row*1.7) * this.TILE*0.03; },
+
+  drawWater(lane,row,top) {
+    const ctx=this.ctx, T=this.TILE, W=this.W, t=this.elapsed;
+    ctx.fillStyle=(row%2===0)?this.theme.water:shade(this.theme.water,-8);
+    ctx.fillRect(0,top,W,T+1);
+    // depth: darker along the top bank, lighter in the shallows below
+    ctx.fillStyle="rgba(0,0,20,0.10)"; ctx.fillRect(0,top,W,T*0.18);
+    ctx.fillStyle="rgba(255,255,255,0.05)"; ctx.fillRect(0,top+T*0.8,W,T*0.2);
+    // two ribbons of drifting sine shimmer, moving with the current
+    const flow = lane.dir*lane.speed*T;             // current, px/sec
+    ctx.fillStyle="rgba(255,255,255,0.10)";
+    for (let b=0;b<2;b++){
+      const yb = top + T*(b?0.62:0.32);
+      const ph = t*(b?1.7:1.1) + row*2.1 + b*3;
+      const span = T*1.4;
+      const drift = ((t*flow*(b?0.35:0.55))%span+span)%span;
+      for (let x=-span;x<W+span;x+=T*0.7){
+        const xx = x + drift;
+        const yy = yb + Math.sin(xx*0.045 + ph)*T*0.06;
+        rr(ctx, xx, yy, T*0.34, Math.max(2,T*0.035), 2); ctx.fill();
+      }
+    }
+    // twinkling sparkle glints, deterministic per row, drifting downstream
+    ctx.fillStyle="rgba(255,255,255,0.22)";
+    const n = Math.ceil(W/T);
+    for (let i=0;i<n;i++){
+      const gx = ((hash2(row,i)*W + t*flow*0.45)%W + W)%W;
+      const gy = top + T*(0.2 + hash2(i,row)*0.6);
+      const tw = 0.5 + 0.5*Math.sin(t*3 + i*2.4 + row);
+      if (tw > 0.4){ ctx.beginPath(); ctx.ellipse(gx,gy,T*0.05*tw+1,Math.max(1.2,T*0.02),0,0,7); ctx.fill(); }
+    }
+  },
+
+  drawLog(lg,row,lane) {
+    const ctx=this.ctx, T=this.TILE;
+    let [x,y]=this.screen(lg.x,row);
+    y += this.waterBob(row);
     const w=lg.len*T*0.94, h=T*0.56;
+    // wake: fading streaks trailing behind the log
+    const back = -lane.dir;
+    ctx.fillStyle="rgba(255,255,255,0.16)";
+    for (let k=0;k<3;k++){
+      const wx = x + back*(w/2 + T*0.08 + k*T*0.16);
+      const wy = y + (k===1 ? -h*0.22 : k===2 ? h*0.22 : 0);
+      rr(ctx, wx - T*0.09, wy-1.5, (T*0.18)*(1-k*0.25), 3, 1.5); ctx.fill();
+    }
     ctx.fillStyle="rgba(0,0,0,0.14)"; rr(ctx,x-w/2+3,y-h/2+5,w,h,h/2); ctx.fill();
     ctx.fillStyle="#8a5a2b"; rr(ctx,x-w/2,y-h/2,w,h,h/2); ctx.fill();
     ctx.fillStyle="#734a22";
@@ -756,7 +800,10 @@ const Game = {
   drawChick() {
     const ctx=this.ctx, T=this.TILE, c=this.chick;
     const sk = SKINS[this.profile && this.profile.avatar] || SKINS["🐔"];
-    const [x,yBase]=this.screen(c.col,c.row);
+    let [x,yBase]=this.screen(c.col,c.row);
+    // riding a log: bob with the lane so bird and log move as one
+    const under=this.world[c.row];
+    if (under && under.type==="water" && c.hop>=1 && !this.dead) yBase += this.waterBob(c.row);
     const arc = c.hop<1 ? Math.sin(Math.PI*c.hop) : 0;
     let y = yBase - arc*T*0.42, sx=1, sy=1;
     if (c.hop<1){ sy=1+arc*0.18; sx=1-arc*0.12; }
