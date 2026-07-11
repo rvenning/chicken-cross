@@ -876,6 +876,7 @@ const Game = {
   },
   drawChick() {
     const ctx=this.ctx, T=this.TILE, c=this.chick;
+    const sk = SKINS[this.profile && this.profile.avatar] || SKINS["🐔"];
     const [x,yBase]=this.screen(c.col,c.row);
     const arc = c.hop<1 ? Math.sin(Math.PI*c.hop) : 0;
     let y = yBase - arc*T*0.42, sx=1, sy=1;
@@ -890,21 +891,78 @@ const Game = {
     // invincible blink
     if (this.invince>0 && Math.floor(this.invince*10)%2===0){ return; }
     ctx.save(); ctx.translate(x,y); ctx.scale(sx,sy);
-    ctx.strokeStyle="#f0a500"; ctx.lineWidth=Math.max(2,s*0.09); ctx.lineCap="round";
-    ctx.beginPath(); ctx.moveTo(-s*0.14,s*0.34); ctx.lineTo(-s*0.14,s*0.46);
-    ctx.moveTo(s*0.14,s*0.34); ctx.lineTo(s*0.14,s*0.46); ctx.stroke();
-    ctx.fillStyle="#fff"; rr(ctx,-s*0.4,-s*0.28,s*0.8,s*0.66,s*0.28); ctx.fill();
-    ctx.fillStyle="rgba(0,0,0,0.06)"; rr(ctx,-s*0.4,0,s*0.8,s*0.38,s*0.24); ctx.fill();
-    ctx.fillStyle="#fff"; rr(ctx,-s*0.26,-s*0.5,s*0.52,s*0.4,s*0.2); ctx.fill();
-    ctx.fillStyle="#e8403a"; ctx.beginPath(); ctx.arc(-s*0.06,-s*0.52,s*0.09,0,7); ctx.arc(s*0.06,-s*0.55,s*0.09,0,7); ctx.fill();
-    rr(ctx,-s*0.03,-s*0.2,s*0.08,s*0.12,3); ctx.fill();
-    ctx.fillStyle="#f0a500"; ctx.beginPath(); ctx.moveTo(s*0.2,-s*0.34); ctx.lineTo(s*0.42,-s*0.28); ctx.lineTo(s*0.2,-s*0.22); ctx.closePath(); ctx.fill();
-    ctx.fillStyle="#222"; ctx.beginPath(); ctx.arc(s*0.02,-s*0.36,s*0.05,0,7); ctx.fill(); ctx.beginPath(); ctx.arc(s*0.16,-s*0.36,s*0.05,0,7); ctx.fill();
+    // legs
+    ctx.strokeStyle=sk.legs; ctx.lineWidth=Math.max(2,s*0.09); ctx.lineCap="round";
+    const lb = sk.longLegs ? s*0.52 : s*0.46;
+    ctx.beginPath(); ctx.moveTo(-s*0.14,s*0.34); ctx.lineTo(-s*0.14,lb);
+    ctx.moveTo(s*0.14,s*0.34); ctx.lineTo(s*0.14,lb); ctx.stroke();
+    // tail plume behind the body (rooster, peacock)
+    if (sk.tail){ ctx.fillStyle=sk.tail; ctx.beginPath();
+      ctx.ellipse(-s*0.44,-s*0.1,s*0.17,s*0.3,-0.5,0,7); ctx.fill(); }
+    // body, belly, shading
+    ctx.fillStyle=sk.body; rr(ctx,-s*0.4,-s*0.28,s*0.8,s*0.66,s*0.28); ctx.fill();
+    if (sk.belly){ ctx.fillStyle=sk.belly; rr(ctx,-s*0.24,-s*0.12,s*0.48,s*0.46,s*0.2); ctx.fill(); }
+    ctx.fillStyle=sk.shade; rr(ctx,-s*0.4,0,s*0.8,s*0.38,s*0.24); ctx.fill();
+    // head, neck ring (duck), face disc + ear tufts (owl)
+    ctx.fillStyle=sk.head||sk.body; rr(ctx,-s*0.26,-s*0.5,s*0.52,s*0.4,s*0.2); ctx.fill();
+    if (sk.ring){ ctx.fillStyle=sk.ring; rr(ctx,-s*0.26,-s*0.16,s*0.52,s*0.07,s*0.03); ctx.fill(); }
+    if (sk.disc){ ctx.fillStyle=sk.disc; rr(ctx,-s*0.21,-s*0.47,s*0.42,s*0.3,s*0.14); ctx.fill(); }
+    if (sk.tufts){ ctx.fillStyle=sk.tufts; ctx.beginPath();
+      ctx.moveTo(-s*0.24,-s*0.44); ctx.lineTo(-s*0.16,-s*0.62); ctx.lineTo(-s*0.08,-s*0.48);
+      ctx.moveTo(s*0.08,-s*0.48); ctx.lineTo(s*0.16,-s*0.62); ctx.lineTo(s*0.24,-s*0.44);
+      ctx.fill(); }
+    // comb + wattle (chickens), head tuft (chick, parrot), crown (peacock)
+    if (sk.comb){ ctx.fillStyle=sk.comb; ctx.beginPath();
+      ctx.arc(-s*0.06,-s*0.52,s*0.09,0,7); ctx.arc(s*0.06,-s*0.55,s*0.09,0,7);
+      if (sk.bigComb) ctx.arc(-s*0.17,-s*0.49,s*0.08,0,7);
+      ctx.fill(); }
+    if (sk.wattle){ ctx.fillStyle=sk.wattle; rr(ctx,-s*0.03,-s*0.2,s*0.08,s*0.12,3); ctx.fill(); }
+    if (sk.tuft){ ctx.fillStyle=sk.tuft; ctx.beginPath();
+      ctx.arc(0,-s*0.56,s*0.07,0,7); ctx.arc(s*0.1,-s*0.53,s*0.055,0,7); ctx.fill(); }
+    if (sk.crown){ ctx.strokeStyle=sk.crown; ctx.lineWidth=Math.max(1.5,s*0.04); ctx.beginPath();
+      for (const dx of [-0.12,0,0.12]){ ctx.moveTo(dx*s,-s*0.5); ctx.lineTo(dx*s,-s*0.62); }
+      ctx.stroke();
+      ctx.fillStyle=sk.crown; ctx.beginPath();
+      for (const dx of [-0.12,0,0.12]){ ctx.moveTo(dx*s+s*0.045,-s*0.64); ctx.arc(dx*s,-s*0.64,s*0.045,0,7); }
+      ctx.fill(); }
+    // beak: flat bill (duck/swan) or pointy triangle, optional dark tip (flamingo)
+    if (sk.flatBill){ ctx.fillStyle=sk.beak; rr(ctx,s*0.16,-s*0.34,s*0.3,s*0.13,s*0.06); ctx.fill(); }
+    else { ctx.fillStyle=sk.beak; ctx.beginPath();
+      ctx.moveTo(s*0.2,-s*0.34); ctx.lineTo(s*0.42,-s*0.28); ctx.lineTo(s*0.2,-s*0.22); ctx.closePath(); ctx.fill();
+      if (sk.beakTip){ ctx.fillStyle=sk.beakTip; ctx.beginPath();
+        ctx.moveTo(s*0.33,-s*0.305); ctx.lineTo(s*0.42,-s*0.28); ctx.lineTo(s*0.33,-s*0.245); ctx.closePath(); ctx.fill(); } }
+    if (sk.mask){ ctx.fillStyle=sk.mask; ctx.beginPath(); ctx.arc(s*0.19,-s*0.28,s*0.06,0,7); ctx.fill(); }
+    // eyes
+    if (sk.bigEyes){
+      ctx.fillStyle="#fff"; ctx.beginPath();
+      ctx.arc(-s*0.02,-s*0.34,s*0.1,0,7); ctx.moveTo(s*0.26,-s*0.34); ctx.arc(s*0.16,-s*0.34,s*0.1,0,7); ctx.fill();
+      ctx.fillStyle="#222"; ctx.beginPath(); ctx.arc(-s*0.02,-s*0.34,s*0.05,0,7); ctx.fill();
+      ctx.beginPath(); ctx.arc(s*0.16,-s*0.34,s*0.05,0,7); ctx.fill();
+    } else {
+      ctx.fillStyle="#222"; ctx.beginPath(); ctx.arc(s*0.02,-s*0.36,s*0.05,0,7); ctx.fill();
+      ctx.beginPath(); ctx.arc(s*0.16,-s*0.36,s*0.05,0,7); ctx.fill();
+    }
     if (this.dead){ ctx.strokeStyle="#222"; ctx.lineWidth=s*0.05; ctx.beginPath();
       ctx.moveTo(-s*0.02,-s*0.4); ctx.lineTo(s*0.06,-s*0.32); ctx.moveTo(s*0.06,-s*0.4); ctx.lineTo(-s*0.02,-s*0.32);
       ctx.moveTo(s*0.12,-s*0.4); ctx.lineTo(s*0.2,-s*0.32); ctx.moveTo(s*0.2,-s*0.4); ctx.lineTo(s*0.12,-s*0.32); ctx.stroke(); }
     ctx.restore();
   },
+};
+
+/* Per-avatar sprite skins — the playable character matches the profile avatar. */
+const SKINS = {
+  "🐔": { body:"#fff",    shade:"rgba(0,0,0,0.06)",       beak:"#f0a500", legs:"#f0a500", comb:"#e8403a", wattle:"#e8403a" },
+  "🐓": { body:"#f6ede1", shade:"rgba(140,60,20,0.18)",   beak:"#f0a500", legs:"#e8952f", comb:"#d93025", wattle:"#d93025", bigComb:true, tail:"#2e7d4f" },
+  "🐤": { body:"#ffd93b", shade:"rgba(0,0,0,0.07)",       beak:"#f28c28", legs:"#f28c28" },
+  "🐥": { body:"#ffe066", shade:"rgba(0,0,0,0.05)",       beak:"#f28c28", legs:"#f28c28", tuft:"#f9a825" },
+  "🦆": { body:"#9c8f80", shade:"rgba(0,0,0,0.10)",       beak:"#fdd835", legs:"#f28c28", head:"#2e7d32", ring:"#fff", flatBill:true },
+  "🐧": { body:"#263238", shade:"rgba(0,0,0,0.2)",        beak:"#f28c28", legs:"#f28c28", belly:"#fff" },
+  "🦉": { body:"#8d6e63", shade:"rgba(0,0,0,0.12)",       beak:"#fdd835", legs:"#a1887f", disc:"#d7ccc8", bigEyes:true, tufts:"#6d4c41" },
+  "🦩": { body:"#f48fb1", shade:"rgba(0,0,0,0.07)",       beak:"#f8bbd0", legs:"#ec407a", beakTip:"#37474f", longLegs:true },
+  "🦜": { body:"#e53935", shade:"rgba(25,50,160,0.28)",   beak:"#eceff1", legs:"#78909c", tuft:"#fdd835" },
+  "🦚": { body:"#00897b", shade:"rgba(13,71,161,0.28)",   beak:"#f0a500", legs:"#455a64", head:"#1565c0", tail:"#43a047", crown:"#1565c0" },
+  "🦢": { body:"#fff",    shade:"rgba(0,0,0,0.05)",       beak:"#f57f17", legs:"#455a64", flatBill:true, mask:"#212121" },
+  "🕊️": { body:"#eceff1", shade:"rgba(120,144,156,0.25)", beak:"#f9a825", legs:"#e57373" },
 };
 
 /* -------------------------------------------------------------------- App */
