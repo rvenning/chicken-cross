@@ -171,6 +171,7 @@
     <p style="opacity:.85;font-size:14px;margin-top:18px">
       Move: Arrow keys / WASD · Swipe or tap on touch
     </p>
+    <p style="opacity:.6;font-size:13px;margin-top:6px"><span id="sync-badge">⏳ connecting…</span></p>
   </div>
 </div>
 
@@ -286,7 +287,24 @@
 "use strict";
 
 /* ---------------------------------------------------------------- Storage */
+// localStorage is the always-available source of truth; when Firebase is
+// reachable, profiles + progress are mirrored to Firestore (collection
+// "chickencross" in the same project as WordVoyage) so the family shares one
+// leaderboard across devices. Same pattern as WordVoyage's js/storage.js.
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyD1h2aN_9spXt8usZ_ycpGFnIIGztESXWk",
+  authDomain: "wordvoyage-e5a5c.firebaseapp.com",
+  projectId: "wordvoyage-e5a5c",
+  storageBucket: "wordvoyage-e5a5c.firebasestorage.app",
+  messagingSenderId: "569011992319",
+  appId: "1:569011992319:web:bdcd6019d112006b5cbeca"
+};
+const FB_COLLECTION = "chickencross";
+
 const Storage = {
+  fb: null,     // { db, doc, setDoc, ... } when Firestore is live
+  online: false,
+
   _get(k, f) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? f; } catch { return f; } },
   _set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 
@@ -298,18 +316,126 @@ const Storage = {
 
   blankProgress() { return { coins: 0, best: 0, levels: {}, updated: 0 }; },
   getProgress(id) { return this._get("cc_progress_" + id, this.blankProgress()); },
-  saveProgress(id, p) { p.updated = Date.now(); this._set("cc_progress_" + id, p); },
+  saveProgress(id, p) { p.updated = Date.now(); this._set("cc_progress_" + id, p); this._pushProgress(id, p); },
 
   addProfile(name, avatar, pin) {
     const ps = this.getProfiles();
     const p = { id: "p" + Date.now() + Math.floor(Math.random()*1e4), name, avatar, pin: pin||null, updated: Date.now() };
-    ps.push(p); this.saveProfiles(ps); return p;
+    ps.push(p); this.saveProfiles(ps); this._pushProfile(p); return p;
   },
-  updateProfile(p) { p.updated = Date.now(); this.saveProfiles(this.getProfiles().map(x => x.id===p.id?p:x)); },
+  updateProfile(p) { p.updated = Date.now(); this.saveProfiles(this.getProfiles().map(x => x.id===p.id?p:x)); this._pushProfile(p); },
+  // Deletes a profile everywhere. A tombstone doc stops other devices'
+  // stale local copies from re-uploading the profile on their next sync.
   deleteProfile(id) {
     this.saveProfiles(this.getProfiles().filter(p => p.id!==id));
     localStorage.removeItem("cc_progress_" + id);
+    this._set("cc_deleted", [...new Set([...this._get("cc_deleted", []), id])]);
     const s = this.getSettings(); if (s.lastProfile===id){ s.lastProfile=null; this.saveSettings(s);}
+    if (this.fb) {
+      const { db, doc, setDoc, deleteDoc } = this.fb;
+      deleteDoc(doc(db, FB_COLLECTION, "profile_" + id)).catch(e => console.warn("delete profile failed", e));
+      deleteDoc(doc(db, FB_COLLECTION, "progress_" + id)).catch(e => console.warn("delete progress failed", e));
+      setDoc(doc(db, FB_COLLECTION, "deleted_" + id), { id, at: Date.now() }).catch(e => console.warn("tombstone failed", e));
+    }
+  },
+
+  /* ----- Firebase sync ----- */
+  async initFirebase() {
+    if (!FIREBASE_CONFIG || !FIREBASE_CONFIG.apiKey) return false;
+    try {
+      const appMod = await import("https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js");
+      const fsMod = await import("https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js");
+      const app = appMod.initializeApp(FIREBASE_CONFIG);
+      this.fb = { db: fsMod.getFirestore(app), ...fsMod };
+      await this._syncDown();
+      this.online = true;
+      return true;
+    } catch (e) {
+      console.warn("Firebase unavailable, running on localStorage only:", e);
+      this.fb = null;
+      return false;
+    }
+  },
+
+  async _syncDown() {
+    const { db, doc, setDoc, deleteDoc, collection, getDocs } = this.fb;
+    const snap = await getDocs(collection(db, FB_COLLECTION));
+    let remoteProfiles = [];
+    const remoteProgress = {};
+    const remoteDeleted = new Set();
+    snap.forEach(d => {
+      const v = d.data();
+      if (d.id.startsWith("profile_")) remoteProfiles.push(v);
+      if (d.id.startsWith("progress_")) remoteProgress[d.id.slice(9)] = v;
+      if (d.id.startsWith("deleted_")) remoteDeleted.add(d.id.slice(8));
+    });
+
+    // Union tombstones from both sides, purge anything they cover.
+    const deleted = new Set([...this._get("cc_deleted", []), ...remoteDeleted]);
+    this._set("cc_deleted", [...deleted]);
+    for (const id of deleted) {
+      if (!remoteDeleted.has(id)) setDoc(doc(db, FB_COLLECTION, "deleted_" + id), { id, at: Date.now() }).catch(() => {});
+      localStorage.removeItem("cc_progress_" + id);
+      delete remoteProgress[id];
+    }
+    for (const rp of remoteProfiles) {
+      if (deleted.has(rp.id)) {
+        deleteDoc(doc(db, FB_COLLECTION, "profile_" + rp.id)).catch(() => {});
+        deleteDoc(doc(db, FB_COLLECTION, "progress_" + rp.id)).catch(() => {});
+      }
+    }
+    remoteProfiles = remoteProfiles.filter(p => !deleted.has(p.id));
+
+    // Merge profiles by id — newer copy wins (e.g. PIN changed on another device).
+    const local = this.getProfiles().filter(p => !deleted.has(p.id));
+    const byId = new Map(local.map(p => [p.id, p]));
+    let changed = local.length !== this.getProfiles().length;
+    for (const rp of remoteProfiles) {
+      const loc = byId.get(rp.id);
+      if (!loc || (rp.updated || 0) > (loc.updated || 0)) { byId.set(rp.id, rp); changed = true; }
+    }
+    if (changed) this.saveProfiles([...byId.values()]);
+
+    // Push local-only profiles/progress up so a fresh device sees them.
+    const remoteIds = new Set(remoteProfiles.map(p => p.id));
+    for (const p of byId.values()) {
+      if (!remoteIds.has(p.id)) this._pushProfile(p);
+      if (!remoteProgress[p.id]) this._pushProgress(p.id, this.getProgress(p.id));
+    }
+
+    // Merge progress: best stars per level, max coins/best distance.
+    for (const [pid, remote] of Object.entries(remoteProgress)) {
+      const localProg = this.getProgress(pid);
+      const merged = this._mergeProgress(localProg, remote);
+      this._set("cc_progress_" + pid, merged);
+      // Local had something the cloud lacked? Send the merged copy back up.
+      if ((localProg.updated || 0) > (remote.updated || 0)) this._pushProgress(pid, merged);
+    }
+  },
+
+  _mergeProgress(a, b) {
+    const levels = { ...a.levels };
+    for (const [gi, lv] of Object.entries(b.levels || {})) {
+      if (!levels[gi] || (lv.stars || 0) > (levels[gi].stars || 0)) levels[gi] = lv;
+    }
+    return {
+      coins: Math.max(a.coins || 0, b.coins || 0),
+      best: Math.max(a.best || 0, b.best || 0),
+      levels,
+      updated: Math.max(a.updated || 0, b.updated || 0),
+    };
+  },
+
+  _pushProfile(p) {
+    if (!this.fb) return;
+    const { db, doc, setDoc } = this.fb;
+    setDoc(doc(db, FB_COLLECTION, "profile_" + p.id), p).catch(e => console.warn("sync profile failed", e));
+  },
+
+  _pushProgress(pid, progress) {
+    if (!this.fb) return;
+    const { db, doc, setDoc } = this.fb;
+    setDoc(doc(db, FB_COLLECTION, "progress_" + pid), progress).catch(e => console.warn("sync progress failed", e));
   },
   levelsDone(prog) { return Object.keys(prog.levels).length; },
   unlockedLevel(prog) { let m=-1; for (const k of Object.keys(prog.levels)) m=Math.max(m,+k); return m+1; },
@@ -1016,6 +1142,12 @@ const App = {
     const s = Storage.getSettings(); Sfx.enabled = s.sound; this.updateSoundBtn();
     Game.boot();
     this.el("lb-back").onclick = () => this.showScreen(this.profile?"map":"splash");
+    // Firestore sync runs in the background; the game is playable immediately.
+    Storage.initFirebase().then(ok => {
+      this.el("sync-badge").textContent = ok ? "☁️ synced" : "📴 offline";
+      // refresh whatever roster the player is looking at with the merged data
+      if (ok && this.screen === "profiles") this.renderProfiles();
+    });
   },
 
   showScreen(name) {
