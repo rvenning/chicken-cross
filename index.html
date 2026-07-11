@@ -9,8 +9,9 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
 <title>Chicken Cross</title>
+<link rel="stylesheet" href="lib/gk-base.css" />
 <style>
-  :root { --ink:#12232e; }
+  /* Game theme + game-specific styles; shared primitives come from gamekit. */
   * { box-sizing: border-box; }
   html, body {
     margin: 0; padding: 0; height: 100%; overflow: hidden;
@@ -21,51 +22,10 @@
   canvas { position: fixed; inset: 0; margin: auto; display: block; background: #6bbf4a;
            touch-action: none; }
 
-  /* ---------- Screens ---------- */
-  .screen { position: fixed; inset: 0; display: none; flex-direction: column;
-            align-items: center; justify-content: flex-start; overflow-y: auto;
-            touch-action: pan-y; }
-  .screen.active { display: flex; }
+  /* ---------- Screens (variants on top of gamekit .screen) ---------- */
   .screen.opaque { background:
       radial-gradient(120% 80% at 50% -10%, #a9e6ff 0%, #6fc3f0 40%, #3f9be0 100%); }
   .screen.game { background: transparent; pointer-events: none; }
-
-  .topbar { width:100%; max-width:560px; display:flex; align-items:center; gap:10px;
-            padding: calc(14px + env(safe-area-inset-top)) 16px 6px; }
-  .topbar .grow { flex:1; }
-  .iconbtn { background: rgba(255,255,255,.9); border:none; border-radius:14px;
-             width:46px; height:46px; font-size:22px; cursor:pointer; color:#12232e;
-             box-shadow:0 4px 0 rgba(0,0,0,.18); }
-  .iconbtn:active { transform: translateY(2px); box-shadow:0 2px 0 rgba(0,0,0,.18); }
-
-  h1.title { font-size: 44px; margin: 30px 0 4px; text-shadow: 0 4px 0 rgba(0,0,0,.25); }
-  .subtitle { opacity:.95; font-size:17px; margin:0 0 8px; }
-  .content { width:100%; max-width:560px; padding: 8px 16px 40px; }
-
-  .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px;
-         border:none; border-radius:16px; padding:16px 22px; font-size:19px; font-weight:800;
-         cursor:pointer; color:#fff; background:#ffb32b; box-shadow:0 6px 0 #d98e12;
-         margin:8px 0; }
-  .btn.green { background:#43c65a; box-shadow:0 6px 0 #2f9a41; }
-  .btn.blue  { background:#3f9be0; box-shadow:0 6px 0 #2b74ab; }
-  .btn.grey  { background:#8794a0; box-shadow:0 6px 0 #5e6b76; }
-  .btn.wide  { width:100%; }
-  .btn:active { transform: translateY(3px); box-shadow:0 3px 0 rgba(0,0,0,.3); }
-  .btn:disabled { filter:grayscale(.7) brightness(.9); cursor:not-allowed; }
-
-  /* ---------- Profiles ---------- */
-  .profile-list { display:flex; flex-direction:column; gap:12px; }
-  .profile-card { position:relative; display:grid; grid-template-columns:56px 1fr auto;
-                  align-items:center; gap:12px; background:rgba(255,255,255,.95); color:#12232e;
-                  border-radius:18px; padding:14px 16px; cursor:pointer; box-shadow:0 6px 0 rgba(0,0,0,.15); }
-  .profile-card:active { transform:translateY(2px); }
-  .profile-card .avatar { font-size:40px; grid-row:1/3; text-align:center; }
-  .profile-card .pname { font-weight:800; font-size:20px; }
-  .profile-card .pmeta { font-size:14px; opacity:.7; grid-column:2; }
-  .profile-card.add { color:#12232e; opacity:.9; grid-template-columns:56px 1fr; }
-  .profile-card .ppin, .profile-card .pdelete {
-      background:none; border:none; font-size:20px; cursor:pointer; grid-row:1/3; }
-  .profile-card .row-btns { grid-row:1/3; display:flex; gap:2px; }
 
   /* ---------- Map / worlds ---------- */
   .player-chip { display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.95);
@@ -89,17 +49,6 @@
   .lvl-dot.locked { background:#b8c0c8; box-shadow:0 4px 0 #8d97a1; cursor:not-allowed; }
   @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
 
-  /* ---------- Leaderboard ---------- */
-  .lb-row { display:grid; grid-template-columns:44px 46px 1fr auto auto; align-items:center; gap:10px;
-            background:rgba(255,255,255,.95); color:#12232e; border-radius:14px; padding:10px 14px; margin:8px 0;
-            box-shadow:0 4px 0 rgba(0,0,0,.12); }
-  .lb-row.me { outline:3px solid #ffb32b; }
-  .lb-rank { font-size:22px; font-weight:900; text-align:center; }
-  .lb-avatar { font-size:30px; }
-  .lb-name { font-weight:800; }
-  .lb-stat { font-size:14px; font-weight:700; opacity:.85; white-space:nowrap; }
-  .lb-empty { text-align:center; opacity:.85; padding:30px; }
-
   /* ---------- Game HUD ---------- */
   #gbar { position:fixed; top:0; left:0; right:0; display:flex; align-items:center; gap:10px;
           padding: calc(12px + env(safe-area-inset-top)) 14px 12px; pointer-events:none; }
@@ -109,51 +58,14 @@
                 text-shadow:0 2px 0 rgba(0,0,0,.3); }
   #g-progress { flex:1; text-align:center; }
 
-  /* ---------- Modals ---------- */
-  .modal { position:fixed; inset:0; display:none; place-items:center; z-index:50;
-           background:rgba(0,0,0,.5); padding:20px; }
-  .modal.visible { display:grid; }
-  .sheet { background:#fff; color:#12232e; border-radius:22px; padding:24px; width:100%;
-           max-width:380px; box-shadow:0 20px 60px rgba(0,0,0,.5); text-align:center; }
-  .sheet h2 { margin:0 0 6px; font-size:24px; }
-  .sheet p { margin:6px 0; opacity:.8; }
-  .sheet input { width:100%; padding:14px; font-size:18px; border:2px solid #d8dee4; border-radius:14px;
-                 margin:8px 0; text-align:center; }
-  .avatar-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin:12px 0; }
-  .avatar-choice { font-size:28px; padding:8px 0; border:2px solid transparent; border-radius:14px;
-                   background:#f0f3f6; cursor:pointer; }
-  .avatar-choice.selected { border-color:#ffb32b; background:#fff4dc; }
-  .row-btns2 { display:flex; gap:10px; margin-top:10px; }
-  .row-btns2 .btn { flex:1; margin:0; }
-
   /* result modal stars/coins */
   .stars { font-size:40px; letter-spacing:6px; margin:8px 0; }
   .bigscore { font-size:44px; font-weight:900; margin:4px 0; }
 
-  /* PIN keypad */
-  .pin-dots { display:flex; gap:14px; justify-content:center; margin:14px 0; }
-  .pin-dots span { width:16px; height:16px; border-radius:50%; background:#d8dee4; }
-  .pin-dots span.on { background:#ffb32b; }
-  .pin-dots.shake { animation: shk .4s; }
-  @keyframes shk { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
-  .pin-pad { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:8px 0; }
-  .pin-key { font-size:24px; font-weight:800; padding:16px 0; border:none; border-radius:14px;
-             background:#f0f3f6; cursor:pointer; color:#12232e; }
-  .pin-key.blank { background:transparent; cursor:default; }
-  .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
-           background:rgba(0,0,0,.8); color:#fff; padding:12px 20px; border-radius:14px;
-           font-weight:700; opacity:0; transition:opacity .3s; pointer-events:none; z-index:80; }
-  .toast.show { opacity:1; }
-
-  /* ---------- Touch devices (iPad-first) ---------- */
+  /* ---------- Touch devices (game-specific; kit covers the rest) ---------- */
   @media (pointer: coarse) {
-    .iconbtn { width:54px; height:54px; font-size:24px; }
     .lvl-dot { width:56px; height:56px; font-size:18px; border-radius:16px; }
     .lvl-dot small { font-size:11px; }
-    .btn { padding:18px 24px; font-size:20px; }
-    .pin-key { padding:20px 0; font-size:26px; }
-    .profile-card { padding:18px; }
-    .profile-card .ppin, .profile-card .pdelete { font-size:24px; padding:10px; }
   }
 </style>
 
@@ -180,7 +92,7 @@
   <div class="topbar">
     <button class="iconbtn" onclick="App.showScreen('splash')">⬅</button>
     <div class="grow"></div>
-    <button class="iconbtn btn-sound" onclick="App.toggleSound()">🔊</button>
+    <button class="iconbtn btn-sound">🔊</button>
   </div>
   <h1 class="title" style="font-size:32px;margin-top:6px">Who's playing?</h1>
   <div class="content"><div class="profile-list" id="profile-list"></div></div>
@@ -193,7 +105,7 @@
     <div class="player-chip" id="map-player"></div>
     <div class="grow"></div>
     <button class="iconbtn" onclick="App.showLeaderboard()">🏆</button>
-    <button class="iconbtn btn-sound" onclick="App.toggleSound()">🔊</button>
+    <button class="iconbtn btn-sound">🔊</button>
   </div>
   <div class="content">
     <button class="btn blue wide" id="btn-endless" onclick="App.startEndless()">♾️ Endless Run</button>
@@ -222,61 +134,19 @@
 </div>
 
 <!-- ============ MODALS ============ -->
-<div class="modal" id="new-profile-modal">
-  <div class="sheet">
-    <h2>New Player</h2>
-    <div class="avatar-grid" id="avatar-grid"></div>
-    <input id="new-name" maxlength="14" placeholder="Name" />
-    <input id="new-pin" maxlength="4" inputmode="numeric" placeholder="PIN (optional, 4 digits)" />
-    <div class="row-btns2">
-      <button class="btn grey" onclick="App.closeModal('new-profile-modal')">Cancel</button>
-      <button class="btn green" onclick="App.createProfile()">Create</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal" id="pin-modal">
-  <div class="sheet">
-    <h2 id="pin-title">Enter PIN</h2>
-    <p id="pin-sub"></p>
-    <div class="pin-dots" id="pin-dots"><span></span><span></span><span></span><span></span></div>
-    <div class="pin-pad" id="pin-pad"></div>
-    <button class="btn grey wide" id="btn-pin-remove" onclick="App.removePin()">Remove PIN</button>
-    <button class="btn grey wide" onclick="App.closePin()">Cancel</button>
-  </div>
-</div>
-
-<div class="modal" id="delete-modal">
-  <div class="sheet">
-    <h2 id="del-title">Delete?</h2>
-    <p>Type <b id="del-name"></b> to confirm.</p>
-    <input id="del-confirm" oninput="App.updateDeleteButton()" placeholder="Type name" />
-    <div class="row-btns2">
-      <button class="btn grey" onclick="App.closeModal('delete-modal')">Cancel</button>
-      <button class="btn" style="background:#e94f4f;box-shadow:0 6px 0 #b83636" id="btn-delete-confirm" onclick="App.confirmDeleteProfile()">Delete</button>
-    </div>
-  </div>
-</div>
-
+<!-- profile/PIN/delete + iOS-install modals are injected by gamekit -->
 <div class="modal" id="result-modal">
   <div class="sheet" id="result-sheet"></div>
 </div>
 
-<!-- iOS install instructions — Safari has no beforeinstallprompt API -->
-<div class="modal" id="ios-install-modal">
-  <div class="sheet">
-    <h2>📲 Add to Home Screen</h2>
-    <p style="text-align:left">iPhones and iPads install web apps from Safari's share menu:</p>
-    <ol style="text-align:left;line-height:1.7;margin:10px 0 16px;padding-left:22px">
-      <li>Tap the <b>Share</b> button in Safari's toolbar</li>
-      <li>Scroll down and tap <b>Add to Home Screen</b></li>
-      <li>Tap <b>Add</b> — Chicken Cross runs fullscreen like a real app!</li>
-    </ol>
-    <button class="btn blue wide" onclick="App.closeModal('ios-install-modal')">Got it</button>
-  </div>
-</div>
-
 <div class="toast" id="toast"></div>
+
+<script src="lib/gk-util.js"></script>
+<script src="lib/gk-audio.js"></script>
+<script src="lib/gk-ui.js"></script>
+<script src="lib/gk-storage.js"></script>
+<script src="lib/gk-profiles.js"></script>
+<script src="lib/gk-pwa.js"></script>
 
 <script>
 /* =========================================================================
@@ -287,133 +157,23 @@
 "use strict";
 
 /* ---------------------------------------------------------------- Storage */
-// localStorage is the always-available source of truth; when Firebase is
-// reachable, profiles + progress are mirrored to Firestore (collection
-// "chickencross" in the same project as WordVoyage) so the family shares one
-// leaderboard across devices. Same pattern as WordVoyage's js/storage.js.
-const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyD1h2aN_9spXt8usZ_ycpGFnIIGztESXWk",
-  authDomain: "wordvoyage-e5a5c.firebaseapp.com",
-  projectId: "wordvoyage-e5a5c",
-  storageBucket: "wordvoyage-e5a5c.firebasestorage.app",
-  messagingSenderId: "569011992319",
-  appId: "1:569011992319:web:bdcd6019d112006b5cbeca"
-};
-const FB_COLLECTION = "chickencross";
-
-const Storage = {
-  fb: null,     // { db, doc, setDoc, ... } when Firestore is live
-  online: false,
-
-  _get(k, f) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? f; } catch { return f; } },
-  _set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
-
-  getSettings() { return this._get("cc_settings", { sound: true, lastProfile: null }); },
-  saveSettings(s) { this._set("cc_settings", s); },
-
-  getProfiles() { return this._get("cc_profiles", []); },
-  saveProfiles(p) { this._set("cc_profiles", p); },
-
-  blankProgress() { return { coins: 0, best: 0, levels: {}, updated: 0 }; },
-  getProgress(id) { return this._get("cc_progress_" + id, this.blankProgress()); },
-  saveProgress(id, p) { p.updated = Date.now(); this._set("cc_progress_" + id, p); this._pushProgress(id, p); },
-
-  addProfile(name, avatar, pin) {
-    const ps = this.getProfiles();
-    const p = { id: "p" + Date.now() + Math.floor(Math.random()*1e4), name, avatar, pin: pin||null, updated: Date.now() };
-    ps.push(p); this.saveProfiles(ps); this._pushProfile(p); return p;
+// gamekit storage: localStorage source of truth + Firestore family sync.
+// Same data keys (cc_*) and Firestore collection as before the migration,
+// so existing profiles and scores carry straight over.
+const Storage = GK.createStorage({
+  prefix: "cc",
+  collection: "chickencross",
+  firebaseConfig: {
+    apiKey: "AIzaSyD1h2aN_9spXt8usZ_ycpGFnIIGztESXWk",
+    authDomain: "wordvoyage-e5a5c.firebaseapp.com",
+    projectId: "wordvoyage-e5a5c",
+    storageBucket: "wordvoyage-e5a5c.firebasestorage.app",
+    messagingSenderId: "569011992319",
+    appId: "1:569011992319:web:bdcd6019d112006b5cbeca"
   },
-  updateProfile(p) { p.updated = Date.now(); this.saveProfiles(this.getProfiles().map(x => x.id===p.id?p:x)); this._pushProfile(p); },
-  // Deletes a profile everywhere. A tombstone doc stops other devices'
-  // stale local copies from re-uploading the profile on their next sync.
-  deleteProfile(id) {
-    this.saveProfiles(this.getProfiles().filter(p => p.id!==id));
-    localStorage.removeItem("cc_progress_" + id);
-    this._set("cc_deleted", [...new Set([...this._get("cc_deleted", []), id])]);
-    const s = this.getSettings(); if (s.lastProfile===id){ s.lastProfile=null; this.saveSettings(s);}
-    if (this.fb) {
-      const { db, doc, setDoc, deleteDoc } = this.fb;
-      deleteDoc(doc(db, FB_COLLECTION, "profile_" + id)).catch(e => console.warn("delete profile failed", e));
-      deleteDoc(doc(db, FB_COLLECTION, "progress_" + id)).catch(e => console.warn("delete progress failed", e));
-      setDoc(doc(db, FB_COLLECTION, "deleted_" + id), { id, at: Date.now() }).catch(e => console.warn("tombstone failed", e));
-    }
-  },
-
-  /* ----- Firebase sync ----- */
-  async initFirebase() {
-    if (!FIREBASE_CONFIG || !FIREBASE_CONFIG.apiKey) return false;
-    try {
-      const appMod = await import("https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js");
-      const fsMod = await import("https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js");
-      const app = appMod.initializeApp(FIREBASE_CONFIG);
-      this.fb = { db: fsMod.getFirestore(app), ...fsMod };
-      await this._syncDown();
-      this.online = true;
-      return true;
-    } catch (e) {
-      console.warn("Firebase unavailable, running on localStorage only:", e);
-      this.fb = null;
-      return false;
-    }
-  },
-
-  async _syncDown() {
-    const { db, doc, setDoc, deleteDoc, collection, getDocs } = this.fb;
-    const snap = await getDocs(collection(db, FB_COLLECTION));
-    let remoteProfiles = [];
-    const remoteProgress = {};
-    const remoteDeleted = new Set();
-    snap.forEach(d => {
-      const v = d.data();
-      if (d.id.startsWith("profile_")) remoteProfiles.push(v);
-      if (d.id.startsWith("progress_")) remoteProgress[d.id.slice(9)] = v;
-      if (d.id.startsWith("deleted_")) remoteDeleted.add(d.id.slice(8));
-    });
-
-    // Union tombstones from both sides, purge anything they cover.
-    const deleted = new Set([...this._get("cc_deleted", []), ...remoteDeleted]);
-    this._set("cc_deleted", [...deleted]);
-    for (const id of deleted) {
-      if (!remoteDeleted.has(id)) setDoc(doc(db, FB_COLLECTION, "deleted_" + id), { id, at: Date.now() }).catch(() => {});
-      localStorage.removeItem("cc_progress_" + id);
-      delete remoteProgress[id];
-    }
-    for (const rp of remoteProfiles) {
-      if (deleted.has(rp.id)) {
-        deleteDoc(doc(db, FB_COLLECTION, "profile_" + rp.id)).catch(() => {});
-        deleteDoc(doc(db, FB_COLLECTION, "progress_" + rp.id)).catch(() => {});
-      }
-    }
-    remoteProfiles = remoteProfiles.filter(p => !deleted.has(p.id));
-
-    // Merge profiles by id — newer copy wins (e.g. PIN changed on another device).
-    const local = this.getProfiles().filter(p => !deleted.has(p.id));
-    const byId = new Map(local.map(p => [p.id, p]));
-    let changed = local.length !== this.getProfiles().length;
-    for (const rp of remoteProfiles) {
-      const loc = byId.get(rp.id);
-      if (!loc || (rp.updated || 0) > (loc.updated || 0)) { byId.set(rp.id, rp); changed = true; }
-    }
-    if (changed) this.saveProfiles([...byId.values()]);
-
-    // Push local-only profiles/progress up so a fresh device sees them.
-    const remoteIds = new Set(remoteProfiles.map(p => p.id));
-    for (const p of byId.values()) {
-      if (!remoteIds.has(p.id)) this._pushProfile(p);
-      if (!remoteProgress[p.id]) this._pushProgress(p.id, this.getProgress(p.id));
-    }
-
-    // Merge progress: best stars per level, max coins/best distance.
-    for (const [pid, remote] of Object.entries(remoteProgress)) {
-      const localProg = this.getProgress(pid);
-      const merged = this._mergeProgress(localProg, remote);
-      this._set("cc_progress_" + pid, merged);
-      // Local had something the cloud lacked? Send the merged copy back up.
-      if ((localProg.updated || 0) > (remote.updated || 0)) this._pushProgress(pid, merged);
-    }
-  },
-
-  _mergeProgress(a, b) {
+  blankProgress: () => ({ coins: 0, best: 0, levels: {}, updated: 0 }),
+  // Cross-device merge: best stars per level, max coins / best distance.
+  mergeProgress: (a, b) => {
     const levels = { ...a.levels };
     for (const [gi, lv] of Object.entries(b.levels || {})) {
       if (!levels[gi] || (lv.stars || 0) > (levels[gi].stars || 0)) levels[gi] = lv;
@@ -422,61 +182,17 @@ const Storage = {
       coins: Math.max(a.coins || 0, b.coins || 0),
       best: Math.max(a.best || 0, b.best || 0),
       levels,
-      updated: Math.max(a.updated || 0, b.updated || 0),
     };
   },
-
-  _pushProfile(p) {
-    if (!this.fb) return;
-    const { db, doc, setDoc } = this.fb;
-    setDoc(doc(db, FB_COLLECTION, "profile_" + p.id), p).catch(e => console.warn("sync profile failed", e));
-  },
-
-  _pushProgress(pid, progress) {
-    if (!this.fb) return;
-    const { db, doc, setDoc } = this.fb;
-    setDoc(doc(db, FB_COLLECTION, "progress_" + pid), progress).catch(e => console.warn("sync progress failed", e));
-  },
-  levelsDone(prog) { return Object.keys(prog.levels).length; },
-  unlockedLevel(prog) { let m=-1; for (const k of Object.keys(prog.levels)) m=Math.max(m,+k); return m+1; },
-  leaderboard() {
-    return this.getProfiles().map(p => {
-      const g = this.getProgress(p.id);
-      return { ...p, best: g.best||0, coins: g.coins||0, done: this.levelsDone(g) };
-    }).sort((a,b) => b.best - a.best || b.done - a.done);
-  },
-};
+});
+const levelsDone = (prog) => Object.keys(prog.levels).length;
+const unlockedLevel = (prog) => { let m = -1; for (const k of Object.keys(prog.levels)) m = Math.max(m, +k); return m + 1; };
 
 /* ------------------------------------------------------------------- Sfx  */
-const Sfx = {
-  ctx: null, enabled: true,
-  init() {
-    if (!this.ctx) { const AC = window.AudioContext||window.webkitAudioContext; if (AC) this.ctx = new AC(); }
-    if (this.ctx && this.ctx.state === "suspended") this.ctx.resume();
-  },
-  tone({ freq=440, type="sine", dur=0.15, vol=0.25, when=0, slide=0 }) {
-    if (!this.enabled || !this.ctx) return;
-    const t = this.ctx.currentTime + when;
-    const o = this.ctx.createOscillator(), g = this.ctx.createGain();
-    o.type = type; o.frequency.setValueAtTime(freq, t);
-    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq+slide), t+dur);
-    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t+dur);
-    o.connect(g).connect(this.ctx.destination); o.start(t); o.stop(t+dur+0.05);
-  },
-  noise({ dur=0.3, vol=0.2, when=0 }) {
-    if (!this.enabled || !this.ctx) return;
-    const t = this.ctx.currentTime + when;
-    const n = Math.floor(this.ctx.sampleRate * dur);
-    const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i=0;i<n;i++) d[i] = (Math.random()*2-1) * (1 - i/n);
-    const src = this.ctx.createBufferSource(); src.buffer = buf;
-    const g = this.ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t+dur);
-    src.connect(g).connect(this.ctx.destination); src.start(t);
-  },
+// gamekit synth core (tone/noise/click/coin/win/lose/wrong) + game jingles.
+const Sfx = GK.Sfx;
+Object.assign(Sfx, {
   hop()    { this.tone({ freq: 520, type:"triangle", dur:0.09, vol:0.16, slide:180 }); },
-  coin()   { this.tone({ freq: 990, type:"square", dur:0.06, vol:0.12 });
-             this.tone({ freq: 1320, type:"square", dur:0.16, vol:0.12, when:0.06 }); },
   squash() { this.noise({ dur:0.18, vol:0.35 }); this.tone({ freq:150, type:"sawtooth", dur:0.25, vol:0.2, slide:-90 }); },
   splash() { this.noise({ dur:0.35, vol:0.28 }); this.tone({ freq:400, type:"sine", dur:0.3, vol:0.15, slide:-260 }); },
   bell()   { this.tone({ freq: 1100, type:"square", dur:0.12, vol:0.13 });
@@ -484,12 +200,7 @@ const Sfx = {
   horn()   { this.tone({ freq: 240, type:"sawtooth", dur:0.5, vol:0.22 });
              this.tone({ freq: 180, type:"sawtooth", dur:0.5, vol:0.18 });
              this.noise({ dur:0.6, vol:0.12, when:0.05 }); },
-  click()  { this.tone({ freq: 600, type:"sine", dur:0.05, vol:0.1 }); },
-  win()    { const n=[523,659,784,1047,784,1047,1319]; n.forEach((f,i)=>{
-             this.tone({ freq:f, type:"triangle", dur:0.24, vol:0.24, when:i*0.11 });
-             this.tone({ freq:f/2, type:"sine", dur:0.28, vol:0.13, when:i*0.11 }); }); },
-  lose()   { [440,392,349,294].forEach((f,i)=>this.tone({ freq:f, type:"triangle", dur:0.3, vol:0.2, when:i*0.14 })); },
-};
+});
 
 /* ----------------------------------------------------------------- Levels */
 // Worlds -> levels. Each level = target distance + difficulty params + theme.
@@ -580,6 +291,9 @@ const Game = {
   resize() {
     this.DPR = Math.min(window.devicePixelRatio||1, 2);
     const w = window.innerWidth, h = window.innerHeight;
+    // A hidden/background tab can report 0x0 at boot; retry until real
+    // dimensions arrive so world geometry never goes NaN.
+    if (!w || !h) { setTimeout(() => this.resize(), 200); return; }
     this.canvas.style.width = w+"px"; this.canvas.style.height = h+"px";
     this.canvas.width = Math.round(w*this.DPR); this.canvas.height = Math.round(h*this.DPR);
     this.ctx.setTransform(this.DPR,0,0,this.DPR,0,0);
@@ -1131,127 +845,44 @@ const SKINS = {
 };
 
 /* -------------------------------------------------------------------- App */
+// Profiles, PINs, delete flow and the leaderboard renderer all come from
+// gamekit (GK.Profiles); App keeps only what is Chicken-Cross-specific.
 const AVATARS = ["🐔","🐤","🦆","🐧","🦉","🦩","🐓","🦜","🐥","🦚","🦢","🕊️"];
-const ADMIN_PIN = "7777";
 
 const App = {
   profile:null, screen:"splash",
   el(id){ return document.getElementById(id); },
 
   init() {
-    const s = Storage.getSettings(); Sfx.enabled = s.sound; this.updateSoundBtn();
+    Sfx.enabled = Storage.getSettings().sound;
+    GK.UI.onScreenChange = (name) => { this.screen = name; Game.active = (name === "game"); };
+    GK.UI.bindSoundToggle(Storage);
+    GK.Profiles.init({
+      storage: Storage,
+      avatars: AVATARS,
+      meta: (p, g) => `🏁 best ${g.best} · 🪙 ${g.coins} · 🗺️ ${levelsDone(g)}/${LEVELS.length}`,
+      onEnter: (p) => { this.profile = p; this.showMap(); },
+      addLabel: "New Player",
+    });
+    GK.initPWA({ appName: "Chicken Cross" });
     Game.boot();
     this.el("lb-back").onclick = () => this.showScreen(this.profile?"map":"splash");
     // Firestore sync runs in the background; the game is playable immediately.
     Storage.initFirebase().then(ok => {
       this.el("sync-badge").textContent = ok ? "☁️ synced" : "📴 offline";
       // refresh whatever roster the player is looking at with the merged data
-      if (ok && this.screen === "profiles") this.renderProfiles();
+      if (ok && this.screen === "profiles") GK.Profiles.renderList();
     });
   },
 
-  showScreen(name) {
-    document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
-    this.el("screen-"+name).classList.add("active");
-    this.screen = name;
-    Game.active = (name==="game");
-  },
+  showScreen(name) { GK.UI.showScreen(name); },
 
-  play() { Sfx.init(); Sfx.click(); this.renderProfiles(); this.showScreen("profiles"); },
-
-  /* ----- profiles ----- */
-  renderProfiles() {
-    const wrap=this.el("profile-list"); wrap.innerHTML="";
-    for (const p of Storage.getProfiles()) {
-      const g=Storage.getProgress(p.id);
-      const d=document.createElement("div"); d.className="profile-card";
-      d.innerHTML=`<span class="avatar">${p.avatar}</span>
-        <span class="pname">${esc(p.name)}</span>
-        <span class="pmeta">🏁 best ${g.best} · 🪙 ${g.coins} · 🗺️ ${Storage.levelsDone(g)}/${LEVELS.length}</span>
-        <span class="row-btns"><button class="ppin">${p.pin?"🔒":"🔓"}</button><button class="pdelete">🗑️</button></span>`;
-      d.onclick=()=>this.selectProfile(p);
-      d.querySelector(".pdelete").onclick=e=>this.askDelete(p,e);
-      d.querySelector(".ppin").onclick=e=>this.managePin(p,e);
-      wrap.appendChild(d);
-    }
-    const add=document.createElement("div"); add.className="profile-card add";
-    add.innerHTML=`<span class="avatar">➕</span><span class="pname">New Player</span>`;
-    add.onclick=()=>this.showNewProfile(); wrap.appendChild(add);
-  },
-  selectProfile(p) {
-    Sfx.click();
-    if (p.pin) this.openPin({ title:`${p.avatar} ${esc(p.name)} is locked`, sub:"Enter the 4-digit PIN",
-      mode:"verify", profile:p, onSuccess:()=>this.enterProfile(p) });
-    else this.enterProfile(p);
-  },
-  enterProfile(p) { this.profile=p; const s=Storage.getSettings(); s.lastProfile=p.id; Storage.saveSettings(s); this.showMap(); },
-
-  showNewProfile() {
-    Sfx.click();
-    const grid=this.el("avatar-grid"); grid.innerHTML="";
-    AVATARS.forEach((a,i)=>{ const b=document.createElement("button");
-      b.className="avatar-choice"+(i===0?" selected":""); b.textContent=a;
-      b.onclick=()=>{ grid.querySelectorAll(".selected").forEach(n=>n.classList.remove("selected")); b.classList.add("selected"); Sfx.click(); };
-      grid.appendChild(b); });
-    this.el("new-name").value=""; this.el("new-pin").value="";
-    this.openModal("new-profile-modal"); this.el("new-name").focus();
-  },
-  createProfile() {
-    const name=this.el("new-name").value.trim(); if(!name){ this.el("new-name").focus(); return; }
-    const pin=this.el("new-pin").value.trim(); if(pin && !/^\d{4}$/.test(pin)){ this.el("new-pin").focus(); return; }
-    const avatar=document.querySelector(".avatar-choice.selected")?.textContent||AVATARS[0];
-    const p=Storage.addProfile(name.slice(0,14),avatar,pin||null);
-    this.closeModal("new-profile-modal"); Sfx.win(); this.enterProfile(p);
-  },
-  askDelete(p,e) {
-    e.stopPropagation(); Sfx.click();
-    const go=()=>{ this._del=p; this.el("del-title").textContent=`Delete ${p.avatar} ${p.name}?`;
-      this.el("del-name").textContent=p.name; this.el("del-confirm").value="";
-      this.el("btn-delete-confirm").disabled=true; this.openModal("delete-modal"); this.el("del-confirm").focus(); };
-    if (p.pin) this.openPin({ title:`${esc(p.name)} is PIN protected`, sub:"Enter PIN to delete", mode:"verify", profile:p, onSuccess:go });
-    else go();
-  },
-  updateDeleteButton(){ const t=this.el("del-confirm").value.trim().toLowerCase();
-    this.el("btn-delete-confirm").disabled = t !== (this._del?.name||"").toLowerCase(); },
-  confirmDeleteProfile(){ const p=this._del; if(!p) return;
-    if (this.el("del-confirm").value.trim().toLowerCase()!==p.name.toLowerCase()) return;
-    Storage.deleteProfile(p.id); if (this.profile?.id===p.id) this.profile=null;
-    this._del=null; this.closeModal("delete-modal"); Sfx.lose(); this.renderProfiles(); },
-
-  /* ----- PIN ----- */
-  openPin(ctx) {
-    this._pin={ digits:"", ...ctx };
-    this.el("pin-title").innerHTML=ctx.title; this.el("pin-sub").textContent=ctx.sub||"";
-    this.el("btn-pin-remove").style.display = ctx.allowRemove?"":"none";
-    const pad=this.el("pin-pad");
-    if (!pad.dataset.built){ pad.dataset.built="1";
-      ["1","2","3","4","5","6","7","8","9","","0","⌫"].forEach(k=>{ const b=document.createElement("button");
-        b.className="pin-key"+(k===""?" blank":""); b.textContent=k; if(k!=="") b.onclick=()=>this.pinKey(k); pad.appendChild(b); }); }
-    this.renderPinDots(); this.openModal("pin-modal");
-  },
-  closePin(){ this._pin=null; this.closeModal("pin-modal"); },
-  renderPinDots(){ const n=this._pin?this._pin.digits.length:0;
-    [...this.el("pin-dots").children].forEach((d,i)=>d.classList.toggle("on",i<n)); },
-  pinKey(k){ if(!this._pin) return; Sfx.click();
-    if (k==="⌫") this._pin.digits=this._pin.digits.slice(0,-1);
-    else if (this._pin.digits.length<4) this._pin.digits+=k;
-    this.renderPinDots();
-    if (this._pin.digits.length===4) setTimeout(()=>this.pinDone(),120); },
-  pinDone(){ if(!this._pin) return; const { digits,mode,profile,onSuccess }=this._pin;
-    if (mode==="verify"){ if (digits===profile.pin || digits===ADMIN_PIN){ Sfx.win(); this.closePin(); onSuccess(); }
-      else { Sfx.lose(); const d=this.el("pin-dots"); d.classList.add("shake");
-        setTimeout(()=>{ d.classList.remove("shake"); if(this._pin){ this._pin.digits=""; this.renderPinDots(); } },450); } }
-    else { profile.pin=digits; Storage.updateProfile(profile); Sfx.win(); this.closePin(); this.renderProfiles(); } },
-  managePin(p,e){ e.stopPropagation(); Sfx.click();
-    const set=()=>this.openPin({ title:`${p.pin?"New":"Set a"} PIN for ${p.avatar} ${esc(p.name)}`, sub:"Tap 4 digits", mode:"set", profile:p, allowRemove:!!p.pin });
-    if (p.pin) this.openPin({ title:`Change ${esc(p.name)}'s PIN`, sub:"Enter current PIN first", mode:"verify", profile:p, onSuccess:set });
-    else set(); },
-  removePin(){ if(!this._pin?.profile) return; this._pin.profile.pin=null; Storage.updateProfile(this._pin.profile); Sfx.click(); this.closePin(); this.renderProfiles(); },
+  play() { Sfx.init(); Sfx.click(); GK.Profiles.renderList(); this.showScreen("profiles"); },
 
   /* ----- map ----- */
   showMap() {
     if (!this.profile) return this.play();
-    const g=Storage.getProgress(this.profile.id), unlocked=Storage.unlockedLevel(g);
+    const g=Storage.getProgress(this.profile.id), unlocked=unlockedLevel(g);
     this.el("map-player").innerHTML=`${this.profile.avatar} ${esc(this.profile.name)}
       <span class="pmeta">🪙 ${g.coins} · 🏁 ${g.best}</span>`;
     const wrap=this.el("world-list"); wrap.innerHTML="";
@@ -1334,109 +965,32 @@ const App = {
   /* ----- leaderboard ----- */
   showLeaderboard() {
     Sfx.init(); Sfx.click();
-    const rows=Storage.leaderboard(), wrap=this.el("lb-rows"); wrap.innerHTML="";
-    const medals=["🥇","🥈","🥉"];
-    rows.forEach((r,i)=>{ const d=document.createElement("div");
-      d.className="lb-row"+(this.profile&&r.id===this.profile.id?" me":"");
-      d.innerHTML=`<span class="lb-rank">${medals[i]||(i+1)}</span>
-        <span class="lb-avatar">${r.avatar}</span>
-        <span class="lb-name">${esc(r.name)}</span>
-        <span class="lb-stat">🗺️ ${r.done}</span>
-        <span class="lb-stat">🏁 ${r.best}m · 🪙 ${r.coins}</span>`;
-      wrap.appendChild(d); });
-    if (!rows.length) wrap.innerHTML=`<div class="lb-empty">No players yet — tap Play to begin!</div>`;
+    GK.Profiles.renderLeaderboard("lb-rows", {
+      cols: r => `<span class="lb-stat">🗺️ ${levelsDone(r.progress)}</span>
+        <span class="lb-stat">🏁 ${r.progress.best||0}m · 🪙 ${r.progress.coins||0}</span>`,
+      sort: (a,b) => (b.progress.best||0)-(a.progress.best||0) || levelsDone(b.progress)-levelsDone(a.progress),
+      meId: this.profile?.id,
+      empty: "No players yet — tap Play to begin!",
+    });
     this.showScreen("leaderboard");
   },
 
   /* ----- misc ----- */
-  openModal(id){ this.el(id).classList.add("visible"); },
-  closeModal(id){ this.el(id).classList.remove("visible"); },
-  toggleSound(){ Sfx.enabled=!Sfx.enabled; const s=Storage.getSettings(); s.sound=Sfx.enabled; Storage.saveSettings(s); this.updateSoundBtn(); Sfx.click(); },
-  updateSoundBtn(){ document.querySelectorAll(".btn-sound").forEach(b=>b.textContent=Sfx.enabled?"🔊":"🔇"); },
-  toast(msg){ const t=this.el("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(this._tt); this._tt=setTimeout(()=>t.classList.remove("show"),1600); },
+  openModal(id){ GK.UI.openModal(id); },
+  closeModal(id){ GK.UI.closeModal(id); },
+  toast(msg){ GK.UI.toast(msg); },
 };
 
 /* --------------------------------------------------------------- helpers */
+// shared helpers come from gamekit; rr (canvas round-rect path) is game-specific
 const CAR_COLORS=["#e94f4f","#f0a53b","#4f7fe9","#8e4fe9","#3bc4b0","#e94f9d","#f2d13b"];
-function rand(a,b){ return a+Math.random()*(b-a); }
-function irand(a,b){ return Math.floor(rand(a,b+1)); }
-function pick(a){ return a[irand(0,a.length-1)]; }
-function clamp(v,a,b){ return v<a?a:v>b?b:v; }
-function lerp(a,b,t){ return a+(b-a)*t; }
-function esc(s){ return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-function hash2(r,c){ let n=(r*374761393 + c*668265263)|0; n=Math.imul(n^(n>>>13),1274126177); return ((n^(n>>>16))>>>0)/4294967296; }
+const { esc, clamp, lerp, rand, irand, pick, shade, hash2 } = GK.util;
 function rr(ctx,x,y,w,h,r){ r=Math.min(r,Math.abs(w)/2,Math.abs(h)/2); ctx.beginPath();
   ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
   ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
-function shade(hex,amt){ const n=parseInt(hex.slice(1),16);
-  let r=(n>>16)+amt, g=((n>>8)&255)+amt, b=(n&255)+amt;
-  r=clamp(r,0,255); g=clamp(g,0,255); b=clamp(b,0,255);
-  return "#"+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1); }
 
 // expose for inline handlers
 window.App=App; window.Game=Game;
 window.addEventListener("DOMContentLoaded", ()=>App.init());
-})();
-</script>
-
-<script>
-/* =========================================================================
-   PWA install support (same approach as WordVoyage's js/pwa.js).
-
-   Chrome (desktop & Android) fires `beforeinstallprompt` when the app is
-   installable; we stash that event and reveal the "Add to Home Screen"
-   button, then call prompt() on click. iOS Safari never fires it, so there
-   the button shows step-by-step share-menu instructions instead. When the
-   app is already installed (standalone display mode) the button never shows.
-   ========================================================================= */
-(() => {
-  // --- service worker: network-first cache, see sw.js ---
-  if ("serviceWorker" in navigator) {
-    // Relative path keeps the scope correct on GitHub Pages (/chicken-cross/).
-    navigator.serviceWorker.register("sw.js").catch((e) => console.warn("SW registration failed:", e));
-  }
-
-  const btn = document.getElementById("btn-install");
-  if (!btn) return;
-
-  // Already running as an installed app? Never show the button.
-  const isStandalone =
-    window.matchMedia("(display-mode: standalone)").matches ||
-    window.navigator.standalone === true; // iOS Safari's non-standard flag
-
-  // iPadOS 13+ reports as MacIntel, hence the maxTouchPoints check.
-  const isIos =
-    /iphone|ipad|ipod/i.test(navigator.userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-
-  let deferredPrompt = null;
-
-  window.addEventListener("beforeinstallprompt", (e) => {
-    e.preventDefault(); // suppress Chrome's mini-infobar; we show our own button
-    deferredPrompt = e;
-    if (!isStandalone) btn.style.display = "";
-  });
-
-  // Fired on successful install (Chrome). Hide the button for good.
-  window.addEventListener("appinstalled", () => {
-    deferredPrompt = null;
-    btn.style.display = "none";
-  });
-
-  // iOS: no install event exists, so offer manual instructions.
-  if (isIos && !isStandalone) btn.style.display = "";
-
-  btn.addEventListener("click", async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      // The stashed event is single-use either way; if dismissed, Chrome may
-      // fire beforeinstallprompt again later, which re-shows the button.
-      deferredPrompt = null;
-      if (outcome === "accepted") btn.style.display = "none";
-    } else if (isIos) {
-      document.getElementById("ios-install-modal").classList.add("visible");
-    }
-  });
 })();
 </script>
