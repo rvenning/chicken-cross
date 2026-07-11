@@ -76,7 +76,9 @@
   <h1 class="title">🐔 Chicken Cross</h1>
   <p class="subtitle">Dodge cars, ride logs, beat the trains!</p>
   <div class="content" style="text-align:center">
-    <button class="btn green wide" onclick="App.play()">▶ Play</button>
+    <!-- shown when this device has a last player: one-tap continue -->
+    <button class="btn green wide" id="btn-continue-as" style="display:none"></button>
+    <button class="btn green wide" id="btn-play" onclick="App.play()">▶ Play</button>
     <button class="btn blue wide" onclick="App.showLeaderboard()">🏆 High Scores</button>
     <!-- shown by the PWA script only when the app is installable and not yet installed -->
     <button class="btn grey wide" id="btn-install" style="display:none">📲 Add to Home Screen</button>
@@ -902,7 +904,11 @@ const App = {
 
   init() {
     Sfx.enabled = Storage.getSettings().sound;
-    GK.UI.onScreenChange = (name) => { this.screen = name; Game.active = (name === "game"); };
+    GK.UI.onScreenChange = (name) => {
+      this.screen = name;
+      Game.active = (name === "game");
+      if (name === "splash") this.refreshSplash();
+    };
     GK.UI.bindSoundToggle(Storage);
     GK.Profiles.init({
       storage: Storage,
@@ -914,15 +920,32 @@ const App = {
     GK.initPWA({ appName: "Chicken Cross" });
     Game.boot();
     this.el("lb-back").onclick = () => this.showScreen(this.profile?"map":"splash");
+    this.refreshSplash();
     // Firestore sync runs in the background; the game is playable immediately.
     Storage.initFirebase().then(ok => {
       this.el("sync-badge").textContent = ok ? "☁️ synced" : "📴 offline";
-      // refresh whatever roster the player is looking at with the merged data
+      // refresh whatever the player is looking at with the merged data
       if (ok && this.screen === "profiles") GK.Profiles.renderList();
+      if (ok && this.screen === "splash") this.refreshSplash();
     });
   },
 
   showScreen(name) { GK.UI.showScreen(name); },
+
+  // One-tap "Continue as <last player>" on the splash; Play becomes Switch.
+  refreshSplash() {
+    const last = GK.Profiles.lastProfile();
+    const cont = this.el("btn-continue-as"), play = this.el("btn-play");
+    if (last) {
+      cont.style.display = "";
+      cont.textContent = `▶ Continue as ${last.avatar} ${last.name}`;
+      cont.onclick = () => { Sfx.init(); GK.Profiles.select(last); };
+      play.className = "btn blue wide"; play.textContent = "👥 Switch Player";
+    } else {
+      cont.style.display = "none";
+      play.className = "btn green wide"; play.textContent = "▶ Play";
+    }
+  },
 
   play() { Sfx.init(); Sfx.click(); GK.Profiles.renderList(); this.showScreen("profiles"); },
 
