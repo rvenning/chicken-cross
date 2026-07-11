@@ -4,6 +4,10 @@
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Chicken Cross" />
+<meta name="theme-color" content="#1c2a33" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
 <title>Chicken Cross</title>
 <style>
   :root { --ink:#12232e; }
@@ -162,6 +166,8 @@
   <div class="content" style="text-align:center">
     <button class="btn green wide" onclick="App.play()">▶ Play</button>
     <button class="btn blue wide" onclick="App.showLeaderboard()">🏆 High Scores</button>
+    <!-- shown by the PWA script only when the app is installable and not yet installed -->
+    <button class="btn grey wide" id="btn-install" style="display:none">📲 Add to Home Screen</button>
     <p style="opacity:.85;font-size:14px;margin-top:18px">
       Move: Arrow keys / WASD · Swipe or tap on touch
     </p>
@@ -253,6 +259,20 @@
 
 <div class="modal" id="result-modal">
   <div class="sheet" id="result-sheet"></div>
+</div>
+
+<!-- iOS install instructions — Safari has no beforeinstallprompt API -->
+<div class="modal" id="ios-install-modal">
+  <div class="sheet">
+    <h2>📲 Add to Home Screen</h2>
+    <p style="text-align:left">iPhones and iPads install web apps from Safari's share menu:</p>
+    <ol style="text-align:left;line-height:1.7;margin:10px 0 16px;padding-left:22px">
+      <li>Tap the <b>Share</b> button in Safari's toolbar</li>
+      <li>Scroll down and tap <b>Add to Home Screen</b></li>
+      <li>Tap <b>Add</b> — Chicken Cross runs fullscreen like a real app!</li>
+    </ol>
+    <button class="btn blue wide" onclick="App.closeModal('ios-install-modal')">Got it</button>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -363,25 +383,44 @@ const WORLDS = [
   { name:"Rush Hour", emoji:"🚦", accent:"#f4c8a0",
     theme:{ grassA:"#5f8f4a", grassB:"#578442", road:"#38383f", water:"#2f6fa8", bg:"#3a4a3a" },
     w:{ grass:0.25, road:0.42, water:0.18, rail:0.15 } },
+  { name:"Night Roads", emoji:"🌙", accent:"#9fb4d8",
+    theme:{ grassA:"#3f6b3a", grassB:"#396234", road:"#2b2b33", water:"#1f5e8e", bg:"#2e4030" },
+    w:{ grass:0.30, road:0.45, water:0.10, rail:0.15 } },
+  { name:"Desert Dash", emoji:"🏜️", accent:"#f0dca0",
+    theme:{ grassA:"#d9b866", grassB:"#d2b05e", road:"#5a4f46", water:"#3f9be0", bg:"#cfae5e" },
+    w:{ grass:0.38, road:0.40, water:0.07, rail:0.15 } },
+  { name:"Jungle Rapids", emoji:"🌴", accent:"#b3e6a0",
+    theme:{ grassA:"#4e9e44", grassB:"#46943c", road:"#454f43", water:"#2a7fc4", bg:"#3e8a38" },
+    w:{ grass:0.28, road:0.18, water:0.46, rail:0.08 } },
+  { name:"Grand Central", emoji:"🚂", accent:"#d8c4b0",
+    theme:{ grassA:"#8fae7a", grassB:"#86a471", road:"#3e3e46", water:"#3f89c8", bg:"#6e8560" },
+    w:{ grass:0.30, road:0.25, water:0.05, rail:0.40 } },
+  { name:"Volcano Finale", emoji:"🌋", accent:"#f4a888",
+    theme:{ grassA:"#6e5a50", grassB:"#665349", road:"#33272a", water:"#d84315", bg:"#4a3733" },
+    w:{ grass:0.22, road:0.38, water:0.20, rail:0.20 } },
 ];
 const LEVELS_PER_WORLD = 4;
 const LEVELS = [];
 WORLDS.forEach((world, wi) => {
   for (let j=0; j<LEVELS_PER_WORLD; j++) {
     const gi = LEVELS.length;
-    const diff = wi*LEVELS_PER_WORLD + j;         // 0..19
+    const diff = wi*LEVELS_PER_WORLD + j;         // 0..39
     LEVELS.push({
       gi, world, wi, indexInWorld: j,
-      target: 12 + gi*3,                            // rows to reach
+      // Rows to reach. Worlds 1-5 keep their original targets (saved progress
+      // and star records stay valid); later levels grow more gently so the
+      // finale is long but not a marathon.
+      target: gi < 20 ? 12 + gi*3 : 72 + (gi-20)*2,
+      // Difficulty ramps are capped so worlds 6-10 are hard but beatable.
       params: {
         weights: world.w,
         theme: world.theme,
-        carMin: 1.5 + diff*0.10,
-        carMax: 3.0 + diff*0.16,
+        carMin: Math.min(1.5 + diff*0.10, 3.6),
+        carMax: Math.min(3.0 + diff*0.16, 6.4),
         truckChance: 0.22 + Math.min(0.2, diff*0.01),
-        creep: 0.45 + diff*0.035,
+        creep: Math.min(0.45 + diff*0.035, 1.30),
         coinRate: 0.42,
-        railFast: 12 + diff*0.4,
+        railFast: Math.min(12 + diff*0.4, 24),
       },
     });
   }
@@ -1205,5 +1244,67 @@ function shade(hex,amt){ const n=parseInt(hex.slice(1),16);
 // expose for inline handlers
 window.App=App; window.Game=Game;
 window.addEventListener("DOMContentLoaded", ()=>App.init());
+})();
+</script>
+
+<script>
+/* =========================================================================
+   PWA install support (same approach as WordVoyage's js/pwa.js).
+
+   Chrome (desktop & Android) fires `beforeinstallprompt` when the app is
+   installable; we stash that event and reveal the "Add to Home Screen"
+   button, then call prompt() on click. iOS Safari never fires it, so there
+   the button shows step-by-step share-menu instructions instead. When the
+   app is already installed (standalone display mode) the button never shows.
+   ========================================================================= */
+(() => {
+  // --- service worker: network-first cache, see sw.js ---
+  if ("serviceWorker" in navigator) {
+    // Relative path keeps the scope correct on GitHub Pages (/chicken-cross/).
+    navigator.serviceWorker.register("sw.js").catch((e) => console.warn("SW registration failed:", e));
+  }
+
+  const btn = document.getElementById("btn-install");
+  if (!btn) return;
+
+  // Already running as an installed app? Never show the button.
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true; // iOS Safari's non-standard flag
+
+  // iPadOS 13+ reports as MacIntel, hence the maxTouchPoints check.
+  const isIos =
+    /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+  let deferredPrompt = null;
+
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault(); // suppress Chrome's mini-infobar; we show our own button
+    deferredPrompt = e;
+    if (!isStandalone) btn.style.display = "";
+  });
+
+  // Fired on successful install (Chrome). Hide the button for good.
+  window.addEventListener("appinstalled", () => {
+    deferredPrompt = null;
+    btn.style.display = "none";
+  });
+
+  // iOS: no install event exists, so offer manual instructions.
+  if (isIos && !isStandalone) btn.style.display = "";
+
+  btn.addEventListener("click", async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      // The stashed event is single-use either way; if dismissed, Chrome may
+      // fire beforeinstallprompt again later, which re-shows the button.
+      deferredPrompt = null;
+      if (outcome === "accepted") btn.style.display = "none";
+    } else if (isIos) {
+      document.getElementById("ios-install-modal").classList.add("visible");
+    }
+  });
 })();
 </script>

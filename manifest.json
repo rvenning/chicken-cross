@@ -1,0 +1,31 @@
+{
+  "name": "Chicken Cross — Dodge cars, ride logs, beat the trains!",
+  "short_name": "Chicken Cross",
+  "description": "A Crossy-Road-style family game. Hop the chicken across roads, rivers and railways.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#1c2a33",
+  "background_color": "#6bbf4a",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
