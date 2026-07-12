@@ -132,6 +132,7 @@
     <div class="pill" id="g-progress">0</div>
     <div class="grow" style="flex:1"></div>
     <div class="pill" id="g-coins">🪙 0</div>
+    <button class="iconbtn" onclick="Game.pause()" aria-label="Pause">⏸</button>
   </div>
 </div>
 
@@ -139,6 +140,16 @@
 <!-- profile/PIN/delete + iOS-install modals are injected by gamekit -->
 <div class="modal" id="result-modal">
   <div class="sheet" id="result-sheet"></div>
+</div>
+
+<div class="modal" id="pause-modal">
+  <div class="sheet">
+    <h2>⏸ Paused</h2>
+    <div class="row-btns2">
+      <button class="btn grey" onclick="Game.exitToMap()">🗺️ Quit</button>
+      <button class="btn green" onclick="Game.resume()">▶ Resume</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -279,13 +290,16 @@ const Game = {
   world:null, maxGen:-1, roadStreak:0, waterStreak:0,
   chick:null, camRow:0, camForced:0, shake:0, elapsed:0,
   runCoins:0, invince:0, revived:false, dead:false, result:null,
-  inputQueue:null,
+  inputQueue:null, paused:false,
 
   boot() {
     this.canvas = document.getElementById("c");
     this.ctx = this.canvas.getContext("2d");
     this.resize();
     window.addEventListener("resize", () => this.resize());
+    // Auto-pause when the tab is hidden / the tablet locks, so an interrupted
+    // run isn't lost. The player resumes from the overlay when they're back.
+    document.addEventListener("visibilitychange", () => { if (document.hidden) this.pause(); });
     this.bindInput();
     requestAnimationFrame((t)=>this.loop(t));
   },
@@ -320,7 +334,7 @@ const Game = {
     this.chick = { col:4, row:0, fromCol:4, fromRow:0, toCol:4, toRow:0, hop:1, maxRow:0 };
     this.camRow=0; this.camForced=0; this.shake=0; this.elapsed=0;
     this.runCoins=0; this.invince=0; this.revived=false; this.dead=false; this.result=null;
-    this.inputQueue=null;
+    this.inputQueue=null; this.paused=false;
     this.running=true; this.active=true;
     App.closeModal("result-modal");
     App.showScreen("game");
@@ -391,7 +405,9 @@ const Game = {
     const km = { ArrowUp:[0,1],KeyW:[0,1],ArrowDown:[0,-1],KeyS:[0,-1],
                  ArrowLeft:[-1,0],KeyA:[-1,0],ArrowRight:[1,0],KeyD:[1,0] };
     window.addEventListener("keydown", e => {
-      if (App.screen!=="game" || !this.running) return;
+      if (App.screen!=="game") return;
+      if (e.code==="Escape" || e.code==="KeyP"){ e.preventDefault(); if (!this.dead) this.togglePause(); return; }
+      if (!this.running || this.paused) return;
       if (e.code==="Space"){ e.preventDefault(); this.move(0,1); return; }
       const m = km[e.code]; if (m){ e.preventDefault(); this.move(m[0],m[1]); }
     });
@@ -430,7 +446,7 @@ const Game = {
   },
 
   move(dc,dr) {
-    if (!this.running || this.dead) return;
+    if (!this.running || this.dead || this.paused) return;
     if (this.chick.hop<1){ this.inputQueue=[dc,dr]; return; }
     this.doMove(dc,dr);
   },
@@ -448,11 +464,26 @@ const Game = {
     Sfx.hop();
   },
 
+  /* ----- pause ----- */
+  pause() {
+    if (!this.active || !this.running || this.dead || this.paused) return;
+    this.paused = true;
+    App.openModal("pause-modal");
+  },
+  resume() {
+    if (!this.paused) return;
+    this.paused = false;
+    this._last = performance.now(); // avoid a dt jump after the freeze
+    App.closeModal("pause-modal");
+  },
+  togglePause() { if (this.paused) this.resume(); else this.pause(); },
+
   /* ----- main loop ----- */
   loop(now) {
     let dt = (now-(this._last||now))/1000; this._last=now;
     if (dt>0.05) dt=0.05;
-    if (this.active) { this.update(dt); this.render(); }
+    // paused: keep rendering the frozen frame (behind the overlay), don't advance
+    if (this.active) { if (!this.paused) this.update(dt); this.render(); }
     else this.ctx.clearRect(0,0,this.W,this.H);
     requestAnimationFrame(t=>this.loop(t));
   },
@@ -603,8 +634,9 @@ const Game = {
   },
 
   exitToMap() {
-    this.running=false; this.active=false;
+    this.running=false; this.active=false; this.paused=false;
     App.closeModal("result-modal");
+    App.closeModal("pause-modal");
     App.showMap();
   },
 
