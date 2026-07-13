@@ -578,13 +578,19 @@ const Game = {
     }
     if (this.invince>0) return;
     if (lane.type==="road") {
-      for (const car of lane.cars){ if (Math.abs(car.x-c.col) < car.width/2+0.42){ this.die("car"); return; } }
+      // Hitbox matches the rendered sprites: car body half-width is car.width*0.45
+      // (drawn at car.width*T*0.9) and the chick body half-width is ~0.2 tiles, so
+      // sprites touch at car.width*0.45+0.2. Small -0.02 keeps deaths from firing on
+      // a still-visible gap (old car.width/2+0.42 left a ~0.27-tile gap = unfair).
+      for (const car of lane.cars){ if (Math.abs(car.x-c.col) < car.width*0.45+0.18){ this.die("car"); return; } }
     } else if (lane.type==="water") {
       let log=null;
       for (const lg of lane.logs){ if (c.col>lg.x-lg.len/2-0.05 && c.col<lg.x+lg.len/2+0.05){ log=lg; break; } }
       if (log){ c.col += lane.dir*lane.speed*dt; if (c.col<-0.35||c.col>COLS-0.65) this.die("fell"); }
       else this.die("water");
     } else if (lane.type==="rail") {
+      // Train sprite is 6 tiles wide (half-width 3); firing at <3 means the chick's
+      // centre is already under the body (near edge overlapping) — fair, so unchanged.
       if (lane.phase==="train" && Math.abs(lane.train.x - c.col) < 3) this.die("train");
     }
   },
