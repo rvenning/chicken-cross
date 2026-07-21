@@ -260,17 +260,21 @@ WORLDS.forEach((world, wi) => {
       // Rows to reach. Worlds 1-5 keep their original targets (saved progress
       // and star records stay valid); later levels grow more gently so the
       // finale is long but not a marathon.
-      target: gi < 20 ? 12 + gi*3 : 72 + (gi-20)*2,
-      // Difficulty ramps are capped so worlds 6-10 are hard but beatable.
+      target: gi < 20 ? 12 + gi*3 : 66 + Math.round((gi-20)*1.5),
+      // Every ramp below caps out around diff 21 (the start of world 6), so the
+      // caps -- not the slopes -- are what worlds 6-10 actually play at. They
+      // are set to the fastest values that still leave a lane readable: a hop
+      // takes HOP_TIME, so a car much past ~5 tiles/sec crosses a tile faster
+      // than the player can commit to a move.
       params: {
         weights: world.w,
         theme: world.theme,
-        carMin: Math.min(1.5 + diff*0.10, 3.6),
-        carMax: Math.min(3.0 + diff*0.16, 6.4),
-        truckChance: 0.22 + Math.min(0.2, diff*0.01),
-        creep: Math.min(0.45 + diff*0.035, 1.30),
+        carMin: Math.min(1.5 + diff*0.10, 3.0),
+        carMax: Math.min(3.0 + diff*0.16, 5.2),
+        truckChance: 0.22 + Math.min(0.12, diff*0.01),
+        creep: Math.min(0.45 + diff*0.035, 0.95),
         coinRate: 0.42,
-        railFast: Math.min(12 + diff*0.4, 24),
+        railFast: Math.min(12 + diff*0.4, 19),
       },
     });
   }
@@ -371,7 +375,11 @@ const Game = {
       const color = pick(CAR_COLORS);
       // Vehicles loop over the full visible width so nothing pops in mid-screen.
       const ext = this.extC, loop = COLS + 2*ext;
-      const count = Math.max(2, Math.round(loop / rand(3.4,4.6)));
+      // Spacing is centre-to-centre, so a 2-tile truck ate its extra width out
+      // of the gap the player crosses -- truck lanes were tighter than car
+      // lanes with nothing to signal it. Add the width back so the actual
+      // opening is the same whatever is driving down it.
+      const count = Math.max(2, Math.round(loop / (rand(4.2,5.4) + width-1)));
       const gap = loop/count, off = rand(0,gap);
       const cars = [];
       for (let i=0;i<count;i++) cars.push({ x:i*gap+off-ext, width, kind });
@@ -498,8 +506,10 @@ const Game = {
 
     if (!this.running) return;
 
-    // camera creep
-    const creep = this.params.creep + Math.min(this.chick.maxRow,200)*0.004;
+    // Camera creep. The distance bonus tops out early on purpose: letting it
+    // run to row 200 meant the camera accelerated hardest exactly when a run
+    // had the most to lose, which read as a difficulty wall rather than a ramp.
+    const creep = this.params.creep + Math.min(this.chick.maxRow,90)*0.004;
     this.camForced += creep*dt;
 
     const c = this.chick;
@@ -578,13 +588,19 @@ const Game = {
     }
     if (this.invince>0) return;
     if (lane.type==="road") {
-      for (const car of lane.cars){ if (Math.abs(car.x-c.col) < car.width/2+0.42){ this.die("car"); return; } }
+      // Hitbox matches the rendered sprites: car body half-width is car.width*0.45
+      // (drawn at car.width*T*0.9) and the chick body half-width is ~0.2 tiles, so
+      // sprites touch at car.width*0.45+0.2. Small -0.02 keeps deaths from firing on
+      // a still-visible gap (old car.width/2+0.42 left a ~0.27-tile gap = unfair).
+      for (const car of lane.cars){ if (Math.abs(car.x-c.col) < car.width*0.45+0.18){ this.die("car"); return; } }
     } else if (lane.type==="water") {
       let log=null;
       for (const lg of lane.logs){ if (c.col>lg.x-lg.len/2-0.05 && c.col<lg.x+lg.len/2+0.05){ log=lg; break; } }
       if (log){ c.col += lane.dir*lane.speed*dt; if (c.col<-0.35||c.col>COLS-0.65) this.die("fell"); }
       else this.die("water");
     } else if (lane.type==="rail") {
+      // Train sprite is 6 tiles wide (half-width 3); firing at <3 means the chick's
+      // centre is already under the body (near edge overlapping) — fair, so unchanged.
       if (lane.phase==="train" && Math.abs(lane.train.x - c.col) < 3) this.die("train");
     }
   },
