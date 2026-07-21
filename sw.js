@@ -4,7 +4,7 @@
 // version they loaded. All game data lives in localStorage, so offline play
 // loses nothing.
 
-const CACHE = "chickencross-v10";
+const CACHE = "chickencross-v11";
 
 // App shell precached at install so the game works offline from the first visit.
 const SHELL = [
