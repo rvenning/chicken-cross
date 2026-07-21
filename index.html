@@ -368,6 +368,7 @@ const Game = {
       const trees = new Set(); const n = irand(0,3); let guard=0;
       while (trees.size<n && guard++<20) trees.add(irand(0,COLS-1));
       if (trees.size>=COLS) trees.delete(irand(0,COLS-1));
+      this.openPaths(trees, this.world[row-1]);
       lane = { type:"grass", trees, coin:null };
     } else if (type==="road") {
       const dir = Math.random()<0.5?-1:1;
@@ -407,6 +408,27 @@ const Game = {
       if (!(lane.type==="grass" && lane.trees.has(col))) lane.coin = { col, taken:false, bob:Math.random()*6 };
     }
     return lane;
+  },
+  // Trees were placed at random per lane, so two grass rows could conspire to
+  // wall the chick in: trees either side of it on its own row, and a tree
+  // directly ahead. It can't step sideways, can't go forward, and the camera
+  // takes it -- a death the player couldn't have avoided. Walk the previous
+  // lane's pockets (runs of treeless columns the chick could be standing in)
+  // and make sure each one has at least one open column directly above it.
+  // Applied to every lane as it is generated, this keeps the whole world
+  // connected without making the trees look any more regular.
+  openPaths(trees, prev) {
+    const blocked = (prev && prev.type==="grass") ? prev.trees : new Set();
+    let start = 0;
+    for (let col=0; col<=COLS; col++) {
+      if (col<COLS && !blocked.has(col)) continue; // still inside a pocket
+      if (col>start) {                             // pocket spans [start, col-1]
+        let open = false;
+        for (let c=start; c<col; c++) if (!trees.has(c)) { open = true; break; }
+        if (!open) trees.delete(irand(start, col-1));
+      }
+      start = col+1;
+    }
   },
   ensureRows(upTo) { while (this.maxGen<upTo){ this.maxGen++; this.world[this.maxGen]=this.makeLane(this.maxGen); } },
 
@@ -641,14 +663,37 @@ const Game = {
     if (this.progress.coins < REVIVE_COST) return false;
     this.progress.coins -= REVIVE_COST;
     Storage.saveProgress(this.profile.id, this.progress);
-    // find a safe grass row at/just below current
-    const c=this.chick; let sr=Math.floor(c.row);
-    for (let r=sr; r>=Math.max(0,sr-6); r--){ if (this.world[r] && this.world[r].type==="grass"){ sr=r; break; } }
-    c.row=sr; c.maxRow=Math.max(c.maxRow,sr); c.col=clamp(Math.round(c.col),0,COLS-1);
+    const c=this.chick;
+    const sr = this.safeRow(Math.floor(c.row));
+    c.row=sr; c.maxRow=Math.max(c.maxRow,sr);
+    c.col=this.safeCol(sr, clamp(Math.round(c.col),0,COLS-1));
     c.hop=1; c.fromRow=c.toRow=sr; c.fromCol=c.toCol=c.col;
     this.dead=false; this.running=true; this.invince=2.2; this.revived=true;
     App.closeModal("result-modal"); this.updateHud();
     return true;
+  },
+
+  // Revive costs 50 coins, so it must never hand back a doomed run -- the old
+  // six-row search gave up silently and left the chick standing in the water
+  // lane that had just drowned it. Prefer ground below the death row (losing a
+  // little distance is fairer than gaining it), then look ahead, and if this
+  // stretch of world is all hazard, turn the landing row into grass outright.
+  safeRow(from) {
+    const floor = Math.max(0, this.camBottomRow()+1); // below this the camera takes you
+    for (let r=Math.max(from,floor); r>=floor; r--) if (this.isSafeRow(r)) return r;
+    for (let r=from+1; r<=from+10; r++){ this.ensureRows(r); if (this.isSafeRow(r)) return r; }
+    const r = Math.max(from, floor);
+    this.world[r] = { type:"grass", trees:new Set(), coin:null };
+    return r;
+  },
+  isSafeRow(r){ const lane=this.world[r]; return !!lane && lane.type==="grass"; },
+  // ...and never inside a tree, where the first hop out would be refused.
+  safeCol(row, want) {
+    const lane=this.world[row];
+    if (!lane || lane.type!=="grass" || !lane.trees.has(want)) return want;
+    for (let d=1; d<COLS; d++) for (const col of [want-d, want+d])
+      if (col>=0 && col<COLS && !lane.trees.has(col)) return col;
+    return want;
   },
 
   exitToMap() {
