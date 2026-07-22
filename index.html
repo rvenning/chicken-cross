@@ -340,7 +340,8 @@ const Game = {
 
     this.world = {}; this.maxGen=-1; this.roadStreak=0; this.waterStreak=0;
     this.ensureRows(45);
-    this.chick = { col:4, row:0, fromCol:4, fromRow:0, toCol:4, toRow:0, hop:1, maxRow:0 };
+    this.chick = { col:4, row:0, fromCol:4, fromRow:0, toCol:4, toRow:0, hop:1, maxRow:0,
+                   rideLog:null, rideOff:0 };
     this.camRow=0; this.camForced=0; this.shake=0; this.elapsed=0;
     this.runCoins=0; this.invince=0; this.revived=false; this.dead=false; this.result=null;
     this.inputQueue=null; this.paused=false; this.bumpT=0;
@@ -487,19 +488,26 @@ const Game = {
   },
   camBottomRow(){ return Math.floor(this.camForced - (this.H*(1-this.BASE_Y))/this.TILE)+1; },
   doMove(dc,dr) {
-    const base = Math.round(this.chick.col);
-    let tc = clamp(base+dc, 0, COLS-1);
     let tr = this.chick.row+dr;
     if (tr<0) tr=0;
     tr = Math.max(tr, this.camBottomRow());
+    // Shuffling along a log moves one tile from where the bird actually is, not
+    // from the nearest grid column. Rounding to the grid each hop threw away the
+    // fractional offset the current had given it, cancelling part of the carry
+    // and walking it off the back of the log. Landings on dry ground still snap
+    // to a column, so the grid is intact everywhere it matters.
+    const from = this.world[this.chick.row], dest = this.world[tr];
+    const afloat = from && from.type==="water" && dest && dest.type==="water";
+    const base = afloat ? this.chick.col : Math.round(this.chick.col);
+    let tc = clamp(base+dc, 0, COLS-1);
     // The move went nowhere -- the playfield edge or the camera floor refused
     // it. The world art carries on past column 0/8, so an edge swipe used to
     // land in silence and read as a dropped input; answer it instead.
     if (tc===base && tr===this.chick.row) { this.bump(dc,dr); return; }
-    const lane = this.world[tr];
-    if (lane && lane.type==="grass" && lane.trees.has(tc)) { this.bump(dc,dr); return; } // blocked
+    if (dest && dest.type==="grass" && dest.trees.has(tc)) { this.bump(dc,dr); return; } // blocked
     const c=this.chick;
     c.fromCol=c.col; c.fromRow=c.row; c.toCol=tc; c.toRow=tr; c.hop=0;
+    c.rideLog=null;   // re-take the offset on landing, wherever that turns out to be
     Sfx.hop();
   },
 
@@ -554,6 +562,17 @@ const Game = {
 
     const c = this.chick;
     if (c.hop<1) {
+      // A hop launched from a log has to travel with it. Carrying the rider
+      // only once it had landed meant the log slid out from under it during
+      // the 110ms flight -- about 0.2 of a tile at full current, so a few
+      // nudges along a log walked the bird off the back through no fault of
+      // its own. Translate the whole arc by the lane's drift instead. Hops
+      // onto dry land keep their target, so they still land squarely on it.
+      const src = this.world[c.fromRow], dst = this.world[c.toRow];
+      if (!this.dead && src && src.type==="water" && dst && dst.type==="water") {
+        const drift = src.dir*src.speed*dt;
+        c.fromCol += drift; c.toCol += drift;
+      }
       c.hop = Math.min(1, c.hop + dt/HOP_TIME);
       c.col = lerp(c.fromCol,c.toCol,c.hop); c.row = lerp(c.fromRow,c.toRow,c.hop);
       if (c.hop>=1) {
@@ -626,6 +645,15 @@ const Game = {
       lane.coin.taken=true; this.runCoins++; this.progress.coins++;
       Storage.saveProgress(this.profile.id, this.progress); Sfx.coin(); this.updateHud();
     }
+    // Riding happens even while invincible -- a bird that stood still on a
+    // moving log until the invincibility ran out would be dumped in open water.
+    if (lane.type==="water") {
+      const riding = this.rideLog(lane);
+      if (this.invince>0) return;
+      if (!riding) { this.die("water"); return; }
+      if (c.col<-0.35 || c.col>COLS-0.65) this.die("fell");
+      return;
+    }
     if (this.invince>0) return;
     if (lane.type==="road") {
       // Hitbox matches the rendered sprites: car body half-width is car.width*0.45
@@ -633,16 +661,30 @@ const Game = {
       // sprites touch at car.width*0.45+0.2. Small -0.02 keeps deaths from firing on
       // a still-visible gap (old car.width/2+0.42 left a ~0.27-tile gap = unfair).
       for (const car of lane.cars){ if (Math.abs(car.x-c.col) < car.width*0.45+0.18){ this.die("car"); return; } }
-    } else if (lane.type==="water") {
-      let log=null;
-      for (const lg of lane.logs){ if (c.col>lg.x-lg.len/2-0.05 && c.col<lg.x+lg.len/2+0.05){ log=lg; break; } }
-      if (log){ c.col += lane.dir*lane.speed*dt; if (c.col<-0.35||c.col>COLS-0.65) this.die("fell"); }
-      else this.die("water");
     } else if (lane.type==="rail") {
       // Train sprite is 6 tiles wide (half-width 3); firing at <3 means the chick's
       // centre is already under the body (near edge overlapping) — fair, so unchanged.
       if (lane.phase==="train" && Math.abs(lane.train.x - c.col) < 3) this.die("train");
     }
+  },
+
+  // Lock the rider to the log it boarded, by a fixed offset from the log's
+  // centre, rather than re-integrating the current every frame. The logs have
+  // already moved by the time this runs, so integrating left the bird a frame
+  // behind the timber it was standing on and biased it toward the trailing
+  // edge. Returns false when it is in open water. The on-log test matches the
+  // drawn log (len*0.94 wide) plus a toe's worth of overhang, so "it looks
+  // like I'm on it" and "I'm on it" agree.
+  rideLog(lane) {
+    const c=this.chick;
+    const log = lane.logs.find(lg => Math.abs(c.col-lg.x) < lg.len*0.47+0.12);
+    if (!log){ c.rideLog=null; return false; }
+    if (c.rideLog!==log){ c.rideLog=log; c.rideOff=c.col-log.x; }
+    const next = log.x + c.rideOff;
+    // the log looped round to the far bank without its passenger
+    if (Math.abs(next-c.col) > 0.5){ c.rideLog=null; return false; }
+    c.col = next;
+    return true;
   },
 
   checkWin() {
@@ -683,7 +725,7 @@ const Game = {
     const sr = this.safeRow(Math.floor(c.row));
     c.row=sr; c.maxRow=Math.max(c.maxRow,sr);
     c.col=this.safeCol(sr, clamp(Math.round(c.col),0,COLS-1));
-    c.hop=1; c.fromRow=c.toRow=sr; c.fromCol=c.toCol=c.col;
+    c.hop=1; c.fromRow=c.toRow=sr; c.fromCol=c.toCol=c.col; c.rideLog=null;
     this.bumpT=0;
     this.dead=false; this.running=true; this.invince=2.2; this.revived=true;
     App.closeModal("result-modal"); this.updateHud();
