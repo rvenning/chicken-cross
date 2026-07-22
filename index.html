@@ -212,6 +212,8 @@ Object.assign(Sfx, {
   splash() { this.noise({ dur:0.35, vol:0.28 }); this.tone({ freq:400, type:"sine", dur:0.3, vol:0.15, slide:-260 }); },
   bell()   { this.tone({ freq: 1100, type:"square", dur:0.12, vol:0.13 });
              this.tone({ freq: 1100, type:"square", dur:0.12, vol:0.13, when:0.18 }); },
+  thud()   { this.tone({ freq: 130, type:"sine", dur:0.11, vol:0.13, slide:-45 });
+             this.noise({ dur:0.06, vol:0.07 }); },
   horn()   { this.tone({ freq: 240, type:"sawtooth", dur:0.5, vol:0.22 });
              this.tone({ freq: 180, type:"sawtooth", dur:0.5, vol:0.18 });
              this.noise({ dur:0.6, vol:0.12, when:0.05 }); },
@@ -297,6 +299,7 @@ const Game = {
   chick:null, camRow:0, camForced:0, shake:0, elapsed:0,
   runCoins:0, invince:0, revived:false, dead:false, result:null,
   inputQueue:null, paused:false,
+  bumpT:0, bumpX:0, bumpY:0,
 
   boot() {
     this.canvas = document.getElementById("c");
@@ -340,7 +343,7 @@ const Game = {
     this.chick = { col:4, row:0, fromCol:4, fromRow:0, toCol:4, toRow:0, hop:1, maxRow:0 };
     this.camRow=0; this.camForced=0; this.shake=0; this.elapsed=0;
     this.runCoins=0; this.invince=0; this.revived=false; this.dead=false; this.result=null;
-    this.inputQueue=null; this.paused=false;
+    this.inputQueue=null; this.paused=false; this.bumpT=0;
     this.running=true; this.active=true;
     App.closeModal("result-modal");
     App.showScreen("game");
@@ -489,11 +492,23 @@ const Game = {
     let tr = this.chick.row+dr;
     if (tr<0) tr=0;
     tr = Math.max(tr, this.camBottomRow());
+    // The move went nowhere -- the playfield edge or the camera floor refused
+    // it. The world art carries on past column 0/8, so an edge swipe used to
+    // land in silence and read as a dropped input; answer it instead.
+    if (tc===base && tr===this.chick.row) { this.bump(dc,dr); return; }
     const lane = this.world[tr];
-    if (lane && lane.type==="grass" && lane.trees.has(tc)) return; // blocked
+    if (lane && lane.type==="grass" && lane.trees.has(tc)) { this.bump(dc,dr); return; } // blocked
     const c=this.chick;
     c.fromCol=c.col; c.fromRow=c.row; c.toCol=tc; c.toRow=tr; c.hop=0;
     Sfx.hop();
+  },
+
+  // Refused input: lean the chick a fraction of a tile the way it tried to go
+  // and spring back, so "you can't go there" is visible as well as audible.
+  bump(dc,dr) {
+    if (this.bumpT>0.55) return; // still leaning from the last one
+    this.bumpT=1; this.bumpX=dc||0; this.bumpY=dr||0;
+    Sfx.thud();
   },
 
   /* ----- pause ----- */
@@ -523,6 +538,7 @@ const Game = {
   update(dt) {
     this.elapsed+=dt;
     if (this.shake>0) this.shake=Math.max(0,this.shake-dt*2.2);
+    if (this.bumpT>0) this.bumpT=Math.max(0,this.bumpT-dt*6);
     if (this.invince>0) this.invince-=dt;
 
     // animate hazards near camera even if paused? only when running
@@ -668,6 +684,7 @@ const Game = {
     c.row=sr; c.maxRow=Math.max(c.maxRow,sr);
     c.col=this.safeCol(sr, clamp(Math.round(c.col),0,COLS-1));
     c.hop=1; c.fromRow=c.toRow=sr; c.fromCol=c.toCol=c.col;
+    this.bumpT=0;
     this.dead=false; this.running=true; this.invince=2.2; this.revived=true;
     App.closeModal("result-modal"); this.updateHud();
     return true;
@@ -913,7 +930,11 @@ const Game = {
     ctx.ellipse(x,yBase+s*0.42,s*0.42*(1+arc*0.15),s*0.18,0,0,7); ctx.fill();
     // invincible blink
     if (this.invince>0 && Math.floor(this.invince*10)%2===0){ return; }
-    ctx.save(); ctx.translate(x,y); ctx.scale(sx,sy);
+    // refused-move lean: body only, so the shadow anchors it to the tile
+    let lx=0, ly=0;
+    if (this.bumpT>0 && !this.dead){ const l=Math.sin(Math.PI*(1-this.bumpT))*T*0.15;
+      lx=this.bumpX*l; ly=-this.bumpY*l; }
+    ctx.save(); ctx.translate(x+lx,y+ly); ctx.scale(sx,sy);
     // legs
     ctx.strokeStyle=sk.legs; ctx.lineWidth=Math.max(2,s*0.09); ctx.lineCap="round";
     const lb = sk.longLegs ? s*0.52 : s*0.46;
