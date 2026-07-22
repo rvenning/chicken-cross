@@ -4,7 +4,7 @@
 // version they loaded. All game data lives in localStorage, so offline play
 // loses nothing.
 
-const CACHE = "chickencross-v14";
+const CACHE = "chickencross-v15";
 
 // App shell precached at install so the game works offline from the first visit.
 const SHELL = [
@@ -17,6 +17,7 @@ const SHELL = [
   "lib/gk-storage.js",
   "lib/gk-profiles.js",
   "lib/gk-pwa.js",
+  "lib/gk-fx.js",
   "lib/gk-base.css",
   "icons/icon-192.png",
   "icons/icon-512.png",
