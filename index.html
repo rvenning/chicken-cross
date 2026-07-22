@@ -162,6 +162,7 @@
 <script src="lib/gk-storage.js"></script>
 <script src="lib/gk-profiles.js"></script>
 <script src="lib/gk-pwa.js"></script>
+<script src="lib/gk-fx.js"></script>
 
 <script>
 /* =========================================================================
@@ -286,6 +287,7 @@ WORLDS.forEach((world, wi) => {
 
 /* ------------------------------------------------------------------- Game */
 const COLS = 9;
+const CONFETTI_COLORS = ["#ffd93b","#e8403a","#4fc3f7","#7ac74f","#ff9f43","#c77dff"];
 const HOP_TIME = 0.11;
 const REVIVE_COST = 50;
 
@@ -344,7 +346,7 @@ const Game = {
                    rideLog:null, rideOff:0 };
     this.camRow=0; this.camForced=0; this.shake=0; this.elapsed=0;
     this.runCoins=0; this.invince=0; this.revived=false; this.dead=false; this.result=null;
-    this.inputQueue=null; this.paused=false; this.bumpT=0;
+    this.inputQueue=null; this.paused=false; this.bumpT=0; GK.Fx.reset();
     this.running=true; this.active=true;
     App.closeModal("result-modal");
     App.showScreen("game");
@@ -548,6 +550,9 @@ const Game = {
     if (this.shake>0) this.shake=Math.max(0,this.shake-dt*2.2);
     if (this.bumpT>0) this.bumpT=Math.max(0,this.bumpT-dt*6);
     if (this.invince>0) this.invince-=dt;
+    // Above the !running gate on purpose: winning stops the run, and the
+    // confetti has to keep falling behind the result card.
+    GK.Fx.update(dt);
 
     // animate hazards near camera even if paused? only when running
     this.animateHazards(dt, this.camRow);
@@ -701,6 +706,8 @@ const Game = {
     else this.progress.levels[gi]=prev;
     Storage.saveProgress(this.profile.id, this.progress);
     Sfx.win();
+    // Win juice: a confetti shower over the finish, from the kit's shared pool.
+    GK.Fx.confetti(this.W, this.H, CONFETTI_COLORS, 90);
     this.result={ type:"win", stars, coins:this.runCoins };
     setTimeout(()=>App.showResult(this.result), 500);
   },
@@ -794,6 +801,9 @@ const Game = {
       ctx.fillStyle=g2; ctx.fillRect(this.W-this.X0,-20,this.X0,this.H+40);
     }
     ctx.restore();
+    // Win confetti sits in screen space, outside the shake transform, so the
+    // celebration doesn't judder along with the world.
+    GK.Fx.render(ctx);
   },
 
   drawLane(row, lane) {
