@@ -1,5 +1,5 @@
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -16,9 +16,13 @@
   html, body {
     margin: 0; padding: 0; height: 100%; overflow: hidden;
     background: #1c2a33; font-family: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
-    user-select: none; -webkit-user-select: none; touch-action: none; color: #fff;
+    user-select: none; -webkit-user-select: none; color: #fff;
     -webkit-touch-callout: none; overscroll-behavior: none;
   }
+  /* Gameplay locks all touch gestures (swipes drive the chick, no pinch/pan).
+     Menu screens deliberately don't, so low-vision players can pinch-zoom to
+     read them -- an accessibility requirement the old page-wide lock broke. */
+  #screen-game { touch-action: none; }
   canvas { position: fixed; inset: 0; margin: auto; display: block; background: #6bbf4a;
            touch-action: none; }
 
@@ -94,9 +98,9 @@
 <!-- ============ PROFILES ============ -->
 <div class="screen opaque" id="screen-profiles">
   <div class="topbar">
-    <button class="iconbtn" onclick="App.showScreen('splash')">⬅</button>
+    <button class="iconbtn" onclick="App.showScreen('splash')" aria-label="Back">⬅</button>
     <div class="grow"></div>
-    <button class="iconbtn btn-sound">🔊</button>
+    <button class="iconbtn btn-sound" aria-label="Toggle sound">🔊</button>
   </div>
   <h1 class="title" style="font-size:32px;margin-top:6px">Who's playing?</h1>
   <div class="content"><div class="profile-list" id="profile-list"></div></div>
@@ -105,11 +109,11 @@
 <!-- ============ MAP ============ -->
 <div class="screen opaque" id="screen-map">
   <div class="topbar">
-    <button class="iconbtn" onclick="App.play()">⬅</button>
+    <button class="iconbtn" onclick="App.play()" aria-label="Back to players">⬅</button>
     <div class="player-chip" id="map-player"></div>
     <div class="grow"></div>
-    <button class="iconbtn" onclick="App.showLeaderboard()">🏆</button>
-    <button class="iconbtn btn-sound">🔊</button>
+    <button class="iconbtn" onclick="App.showLeaderboard()" aria-label="High scores">🏆</button>
+    <button class="iconbtn btn-sound" aria-label="Toggle sound">🔊</button>
   </div>
   <div class="content">
     <button class="btn blue wide" id="btn-endless" onclick="App.startEndless()">♾️ Endless Run</button>
@@ -120,7 +124,7 @@
 <!-- ============ LEADERBOARD ============ -->
 <div class="screen opaque" id="screen-leaderboard">
   <div class="topbar">
-    <button class="iconbtn" id="lb-back">⬅</button>
+    <button class="iconbtn" id="lb-back" aria-label="Back">⬅</button>
     <div class="grow"></div>
   </div>
   <h1 class="title" style="font-size:32px">🏆 High Scores</h1>
@@ -130,7 +134,7 @@
 <!-- ============ GAME ============ -->
 <div class="screen game" id="screen-game">
   <div id="gbar">
-    <button class="iconbtn" onclick="Game.exitToMap()">⬅</button>
+    <button class="iconbtn" onclick="Game.exitToMap()" aria-label="Quit to map">⬅</button>
     <div class="pill" id="g-progress">0</div>
     <div class="grow" style="flex:1"></div>
     <div class="pill" id="g-coins">🪙 0</div>
@@ -290,6 +294,13 @@ const COLS = 9;
 const CONFETTI_COLORS = ["#ffd93b","#e8403a","#4fc3f7","#7ac74f","#ff9f43","#c77dff"];
 const HOP_TIME = 0.11;
 const REVIVE_COST = 50;
+
+// Players who ask their OS for reduced motion get no camera shake, and the
+// rail warning light holds steady instead of flashing. Cached with a live
+// listener so toggling the OS setting takes effect without a reload.
+let REDUCE_MOTION = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+if (window.matchMedia) window.matchMedia("(prefers-reduced-motion: reduce)")
+  .addEventListener("change", e => { REDUCE_MOTION = e.matches; });
 
 const Game = {
   canvas: null, ctx: null, W:0, H:0, TILE:60, DPR:1,
@@ -479,8 +490,9 @@ const Game = {
     this.canvas.addEventListener("mousedown", e=>start("m",e.clientX,e.clientY));
     window.addEventListener("mousemove", e=>drag("m",e.clientX,e.clientY));
     window.addEventListener("mouseup",   ()=>end("m"));
-    // block iOS pinch-zoom gestures
-    document.addEventListener("gesturestart", e=>e.preventDefault());
+    // Block iOS pinch-zoom during gameplay only. On menu screens we let it
+    // through so low-vision players can zoom to read (accessibility).
+    document.addEventListener("gesturestart", e=>{ if (App.screen==="game") e.preventDefault(); });
   },
 
   move(dc,dr) {
@@ -782,7 +794,7 @@ const Game = {
   render() {
     const ctx=this.ctx, TILE=this.TILE;
     ctx.save();
-    if (this.shake>0){ const s=this.shake*10; ctx.translate((Math.random()-0.5)*s,(Math.random()-0.5)*s); }
+    if (this.shake>0 && !REDUCE_MOTION){ const s=this.shake*10; ctx.translate((Math.random()-0.5)*s,(Math.random()-0.5)*s); }
     ctx.clearRect(-20,-20,this.W+40,this.H+40);
     ctx.fillStyle=this.theme.bg; ctx.fillRect(-20,-20,this.W+40,this.H+40);
 
@@ -931,9 +943,11 @@ const Game = {
       // front light
       ctx.fillStyle="#fff6c8"; const fx=lane.dir>0?x+w/2-6:x-w/2+2; ctx.fillRect(fx,y-6,5,12);
     }
-    // warning lights + gates
+    // warning lights + gates. blink*3 => the lamp lights ~1.5 times/sec, safely
+    // under the 3 Hz photosensitivity ceiling (was blink*6). Reduced-motion
+    // players get a steady lamp -- the bell/horn still cue the crossing.
     const on = (lane.phase==="warn"||lane.phase==="train");
-    const flash = on && (Math.floor(lane.blink*6)%2===0);
+    const flash = on && (REDUCE_MOTION || Math.floor(lane.blink*3)%2===0);
     [-1,1].forEach(side=>{
       const gx = side<0 ? this.X0+T*0.5 : this.X0+COLS*T-T*0.5;
       // pole
