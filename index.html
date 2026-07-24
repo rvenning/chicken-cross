@@ -167,6 +167,7 @@
 <script src="lib/gk-profiles.js"></script>
 <script src="lib/gk-pwa.js"></script>
 <script src="lib/gk-fx.js"></script>
+<script src="lib/gk-debug.js"></script>
 
 <script>
 /* =========================================================================
@@ -550,6 +551,7 @@ const Game = {
   /* ----- main loop ----- */
   loop(now) {
     let dt = (now-(this._last||now))/1000; this._last=now;
+    GK.Debug.frame(dt);        // real delta, before the clamp, so fps is honest
     if (dt>0.05) dt=0.05;
     // paused: keep rendering the frozen frame (behind the overlay), don't advance
     if (this.active) { if (!this.paused) this.update(dt); this.render(); }
@@ -666,12 +668,12 @@ const Game = {
     // moving log until the invincibility ran out would be dumped in open water.
     if (lane.type==="water") {
       const riding = this.rideLog(lane);
-      if (this.invince>0) return;
+      if (this.invince>0 || GK.Debug.flag("invincible")) return;
       if (!riding) { this.die("water"); return; }
       if (c.col<-0.35 || c.col>COLS-0.65) this.die("fell");
       return;
     }
-    if (this.invince>0) return;
+    if (this.invince>0 || GK.Debug.flag("invincible")) return;
     if (lane.type==="road") {
       // Hitbox matches the rendered sprites: car body half-width is car.width*0.45
       // (drawn at car.width*T*0.9) and the chick body half-width is ~0.2 tiles, so
@@ -816,6 +818,54 @@ const Game = {
     // Win confetti sits in screen space, outside the shake transform, so the
     // celebration doesn't judder along with the world.
     GK.Fx.render(ctx);
+    this.drawDebug(ctx);
+  },
+
+  // Debug overlays. The hitbox bands are computed from the SAME expressions
+  // laneEffects() tests against, so the overlay can't drift from the real
+  // collision -- a lying overlay would be worse than none.
+  drawDebug(ctx) {
+    const boxes = GK.Debug.flag("hitboxes"), labels = GK.Debug.flag("lanes");
+    if (!boxes && !labels) return;
+    const T = this.TILE;
+    const lo = Math.floor(this.camRow - (this.H*this.BASE_Y)/T) - 1;
+    const hi = Math.ceil(this.camRow + (this.H*(1-this.BASE_Y))/T) + 1;
+    ctx.save();
+    ctx.font = `700 ${Math.max(10, T*0.2)}px ui-monospace,monospace`;
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    // A band spanning columns [from,to] across one lane.
+    const band = (from, to, cy, fill) => {
+      const x1 = this.X0 + (from+0.5)*T, x2 = this.X0 + (to+0.5)*T;
+      ctx.fillStyle = fill; ctx.fillRect(x1, cy - T*0.5, x2-x1, T);
+    };
+    for (let r=lo; r<=hi; r++) {
+      const lane = this.world[r]; if (!lane) continue;
+      const cy = this.screen(0, r)[1];
+      if (boxes) {
+        if (lane.type==="road")
+          // laneEffects: |car.x - col| < car.width*0.45 + 0.18
+          for (const car of lane.cars) { const h = car.width*0.45+0.18; band(car.x-h, car.x+h, cy, "rgba(255,45,45,0.30)"); }
+        else if (lane.type==="rail" && lane.phase==="train")
+          // laneEffects: |train.x - col| < 3
+          band(lane.train.x-3, lane.train.x+3, cy, "rgba(255,45,45,0.30)");
+        else if (lane.type==="water")
+          // rideLog: |col - lg.x| < lg.len*0.47 + 0.12  (green = the SAFE span)
+          for (const lg of lane.logs) { const h = lg.len*0.47+0.12; band(lg.x-h, lg.x+h, cy, "rgba(60,255,140,0.28)"); }
+        else if (lane.type==="grass")
+          for (const col of lane.trees) band(col-0.5, col+0.5, cy, "rgba(255,255,255,0.16)");
+      }
+      if (labels) {
+        const txt = `${r} ${lane.type}`;
+        ctx.fillStyle = "rgba(0,0,0,0.65)"; ctx.fillRect(2, cy-T*0.17, ctx.measureText(txt).width+10, T*0.34);
+        ctx.fillStyle = "#ffd93b"; ctx.fillText(txt, 7, cy);
+      }
+    }
+    if (boxes) {   // the chick's own footprint (~0.2 tiles half-width)
+      const c = this.chick, [cx, cyy] = this.screen(c.col, c.row);
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
+      ctx.strokeRect(cx - T*0.2, cyy - T*0.2, T*0.4, T*0.4);
+    }
+    ctx.restore();
   },
 
   drawLane(row, lane) {
@@ -1136,6 +1186,15 @@ const App = {
       addLabel: "New Player",
     });
     GK.initPWA({ appName: "Chicken Cross" });
+    // ?debug=1 only. Passing Storage makes the kit suppress progress writes,
+    // so jumping levels or turning on invincibility can't pollute a real
+    // profile or the family leaderboard.
+    GK.Debug.init({ storage: Storage, title: "CHICKEN CROSS" })
+      .toggle("hitboxes", "hitboxes")
+      .toggle("lanes", "lanes")
+      .toggle("invincible", "invincible")
+      .jump("level", LEVELS.length, n => this.startLevel(n - 1))
+      .action("endless", () => this.startEndless());
     Game.boot();
     this.el("lb-back").onclick = () => this.showScreen(this.profile?"map":"splash");
     this.refreshSplash();
@@ -1185,7 +1244,8 @@ const App = {
         const rec=g.levels[gi];
         const cls = rec?"done":(gi===unlocked?"next":(gi<unlocked?"done":"locked"));
         const label = rec ? "★".repeat(rec.stars) : (gi<=unlocked?"▶":"🔒");
-        dots.push(`<button class="lvl-dot ${cls}" data-gi="${gi}" ${gi>unlocked?"disabled":""}>${label}<small>${lv.target}m</small></button>`);
+        // debug unlocks every dot so any level is one click away
+        dots.push(`<button class="lvl-dot ${cls}" data-gi="${gi}" ${(gi>unlocked && !GK.Debug.on)?"disabled":""}>${label}<small>${lv.target}m</small></button>`);
       }
       card.innerHTML=`<div class="world-head"><span class="world-emoji">${world.emoji}</span>
         <div><div class="world-name">${world.name}</div>
