@@ -1,0 +1,10 @@
+{
+  "name": "chicken-cross",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Crossy-Road-style family arcade game (no build step; plain HTML/CSS/JS on gamekit).",
+  "scripts": {
+    "test": "node --test",
+    "balance": "node tests/report.js"
+  }
+}
