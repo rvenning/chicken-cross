@@ -265,26 +265,37 @@ WORLDS.forEach((world, wi) => {
   for (let j=0; j<LEVELS_PER_WORLD; j++) {
     const gi = LEVELS.length;
     const diff = wi*LEVELS_PER_WORLD + j;         // 0..39
+    // How far along the campaign this level sits, 0 at level 1 and 1 at level 40.
+    // (Local ramp rather than GK.util's lerp: this runs at load, above the
+    // destructure at the foot of the file, so lerp is still in its TDZ here.)
+    const t = diff/(WORLDS.length*LEVELS_PER_WORLD - 1);
+    const ramp = (from, to) => from + (to-from)*t;
     LEVELS.push({
       gi, world, wi, indexInWorld: j,
       // Rows to reach. Worlds 1-5 keep their original targets (saved progress
-      // and star records stay valid); later levels grow more gently so the
-      // finale is long but not a marathon.
-      target: gi < 20 ? 12 + gi*3 : 66 + Math.round((gi-20)*1.5),
-      // Every ramp below caps out around diff 21 (the start of world 6), so the
-      // caps -- not the slopes -- are what worlds 6-10 actually play at. They
-      // are set to the fastest values that still leave a lane readable: a hop
+      // and star records stay valid). Past that the target barely grows: with
+      // the ramp below now still climbing all the way to level 40, length is no
+      // longer the thing that has to carry the late difficulty, and asking for
+      // 95 unbroken rows was making the finale a test of not blinking.
+      target: gi < 20 ? 12 + gi*3 : 69 + (gi-19),
+      // Every ramp is a straight line from the level-1 value to the level-40
+      // cap. They used to be steep slopes with a Math.min on top, and every one
+      // of them hit its cap by level 18 -- so levels 19-40 were parameterically
+      // IDENTICAL and only the target length grew. That read as a wall at world
+      // 5 followed by twenty levels of the same fight at increasing length.
+      // Same endpoints as before, spread over the whole campaign instead. The
+      // caps are still the fastest values that leave a lane readable: a hop
       // takes HOP_TIME, so a car much past ~5 tiles/sec crosses a tile faster
       // than the player can commit to a move.
       params: {
         weights: world.w,
         theme: world.theme,
-        carMin: Math.min(1.5 + diff*0.10, 3.0),
-        carMax: Math.min(3.0 + diff*0.16, 5.2),
-        truckChance: 0.22 + Math.min(0.12, diff*0.01),
-        creep: Math.min(0.45 + diff*0.035, 0.95),
+        carMin: ramp(1.5, 3.0),
+        carMax: ramp(3.0, 5.2),
+        truckChance: ramp(0.22, 0.34),
+        creep: ramp(0.45, 0.95),
         coinRate: 0.42,
-        railFast: Math.min(12 + diff*0.4, 19),
+        railFast: ramp(12, 19),
       },
     });
   }
@@ -371,7 +382,14 @@ const Game = {
     const w = this.params.weights;
     let type;
     const r = Math.random();
-    if (this.roadStreak >= 3) type = r<0.5 ? "grass" : (w.water>0?"water":"grass");
+    // Streak guards. Roads have always been capped at 3 in a row; water never
+    // was -- waterStreak was tracked and then never read, so the river worlds
+    // (43-46% water) could deal 4 or 5 consecutive log lanes with no dry ground
+    // between them. That is the one pattern the camera creep makes genuinely
+    // unfair: you can't wait out a bad log phase when you can't stand still.
+    // Water goes first so a road streak can't be broken *into* a water streak.
+    if (this.waterStreak >= 2) type = "grass";
+    else if (this.roadStreak >= 3) type = r<0.5 ? "grass" : (w.water>0?"water":"grass");
     else {
       // weighted pick
       const roll = Math.random();
