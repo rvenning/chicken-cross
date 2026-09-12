@@ -67,13 +67,29 @@ function loadGame() {
       URLSearchParams,
     },
   });
-  vm.runInContext(inline[1], sandbox, { filename: "chicken-cross-inline.js" });
+  // Top-level const/let in a runInContext program are not visible to a later
+  // runInContext call (see test-harness.js), and the game's script is wrapped
+  // in an IIFE besides -- so anything a test needs out of its scope has to be
+  // copied onto the sandbox from INSIDE the closure, before it returns.
+  const escape = [
+    "",
+    ";globalThis.SKINS = SKINS;",
+    "globalThis.setReduceMotion = (v) => { REDUCE_MOTION = v; };",
+    "",
+  ].join("\n");
+  const body = inline[1];
+  const close = body.lastIndexOf("})();");
+  if (close < 0) throw new Error("could not find the end of the game's IIFE");
+  const source = body.slice(0, close) + escape + body.slice(close);
+  vm.runInContext(source, sandbox, { filename: "chicken-cross-inline.js" });
 
   const { Game, App, LEVELS } = sandbox;
   if (!Game || !App || !LEVELS) throw new Error("game globals missing after load");
   App.profile = { id: "__bot__", name: "Bot", avatar: "🐔" };
   Game.boot();
-  return { Game, App, LEVELS };
+  // sandbox carries SKINS and setReduceMotion, copied out of the game's
+  // lexical scope above, for the skin tests.
+  return { Game, App, LEVELS, sandbox };
 }
 
 /* -------------------------------------------------------------------- bot */

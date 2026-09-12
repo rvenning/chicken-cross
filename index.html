@@ -1086,9 +1086,31 @@ const Game = {
     // sinking below the surface: hold full opacity for the first moments so the
     // drop is legible, then fade the bird out as the water closes over it
     if (drown) ctx.globalAlpha = Math.max(0, 1 - Math.max(0, t-0.3)/0.7);
+    // Idle timer, presentation-only: the flamingo tucks a leg up once it has
+    // been standing still for a moment. Derived from hop here in the renderer
+    // rather than tracked in the engine, so the bots never see it.
+    // elapsed restarts with each level, so a _movedAt left over from the last
+    // one reads as time travel -- treat a clock that went backwards as a reset.
+    if (this._movedAt===undefined || this._movedAt>this.elapsed || c.hop<1 || this.dead)
+      this._movedAt=this.elapsed;
+    // Skins with their own body plan paint themselves; the rest share the stock
+    // bird. Rosalie's note -- "the flamingo just looks like a pink chicken" --
+    // was exactly right: what makes a flamingo is the silhouette, not the
+    // colour, so it gets its own painter instead of another colour flag.
+    if (sk.plan==="flamingo") this.paintFlamingo(s,sk);
+    else this.paintBird(s,sk);
+    ctx.restore();
+    // ripples last, so they spread across the surface the bird went under
+    if (drown) this.drawRipples(x, yBase, t);
+  },
+
+  // The stock bird: one rounded body with optional combs, tufts, bills and
+  // masks bolted on. Every skin but the flamingo is a dressing of this.
+  paintBird(s, sk) {
+    const ctx=this.ctx;
     // legs
     ctx.strokeStyle=sk.legs; ctx.lineWidth=Math.max(2,s*0.09); ctx.lineCap="round";
-    const lb = sk.longLegs ? s*0.52 : s*0.46;
+    const lb = s*0.46;
     ctx.beginPath(); ctx.moveTo(-s*0.14,s*0.34); ctx.lineTo(-s*0.14,lb);
     ctx.moveTo(s*0.14,s*0.34); ctx.lineTo(s*0.14,lb); ctx.stroke();
     // tail plume behind the body (rooster, peacock)
@@ -1140,9 +1162,99 @@ const Game = {
     if (this.dead){ ctx.strokeStyle="#222"; ctx.lineWidth=s*0.05; ctx.beginPath();
       ctx.moveTo(-s*0.02,-s*0.4); ctx.lineTo(s*0.06,-s*0.32); ctx.moveTo(s*0.06,-s*0.4); ctx.lineTo(-s*0.02,-s*0.32);
       ctx.moveTo(s*0.12,-s*0.4); ctx.lineTo(s*0.2,-s*0.32); ctx.moveTo(s*0.2,-s*0.4); ctx.lineTo(s*0.12,-s*0.32); ctx.stroke(); }
+  },
+
+  // The flamingo is the one skin whose silhouette has to do the work. At tile
+  // size a colour swap only ever says "pink bird"; what says "flamingo" is the
+  // S-neck, the stilt legs and the kinked black-tipped bill, so this paints a
+  // different animal rather than dressing the chicken. The body is kept small
+  // and carried high on purpose -- on a flamingo the legs and neck are most of
+  // the animal, and a big body is exactly what made the old one read as poultry.
+  //
+  // Legibility budget: a car in the lane above has its lower edge at -0.69
+  // tiles (T*0.62 tall, lane-centred), which is -1.38s here. The head tops out
+  // at -1.00s standing, so 0.19 tiles of clearance. The hop arc lifts another
+  // 0.84s and does cross into that band -- but what crosses is a neck 0.07s
+  // wide at the top, where the stock bird's hop peak puts its full 0.8s body in
+  // the same place. The road ahead stays readable.
+  paintFlamingo(s, sk) {
+    const ctx=this.ctx;
+    // one-legged stand once it has been still for a beat
+    const idle=this.elapsed-(this._movedAt||0);
+    const k=Math.min(1,Math.max(0,(idle-0.7)/0.35));
+    const tuck = REDUCE_MOTION ? (k>0?1:0) : k*k*(3-2*k);
+    const lerp=(a,b,u)=>a+(b-a)*u;
+
+    // Legs: hip, a knee that juts backwards the way a flamingo's does, foot.
+    // Drawn before the body so the hips tuck away under it -- and so the folded
+    // leg vanishes into the plumage, which is what the real pose looks like.
+    ctx.strokeStyle=sk.legs; ctx.lineWidth=Math.max(1.5,s*0.055); ctx.lineCap="round";
+    ctx.lineJoin="round";
+    const leg=(dx,up)=>{
+      const kx=lerp(dx-0.10, dx+0.02, up), ky=lerp( 0.20,-0.12, up);
+      const fx=lerp(dx,      dx+0.16, up), fy=lerp( 0.46,-0.22, up);
+      ctx.beginPath(); ctx.moveTo(dx*s,-0.10*s); ctx.lineTo(kx*s,ky*s); ctx.lineTo(fx*s,fy*s);
+      ctx.stroke();
+      // toes, only worth drawing on a foot that is still on the ground
+      if (up<0.5){ ctx.beginPath(); ctx.moveTo(fx*s,fy*s); ctx.lineTo((fx+0.085)*s,fy*s); ctx.stroke(); }
+    };
+    leg(-0.09, tuck);          // far leg is the one that folds up
+    leg( 0.11, 0);
+
+    // short tail tuft, swept up behind
+    ctx.fillStyle=sk.body; ctx.beginPath();
+    ctx.moveTo(-0.20*s,-0.19*s); ctx.lineTo(-0.40*s,-0.33*s); ctx.lineTo(-0.19*s,-0.39*s);
+    ctx.closePath(); ctx.fill();
+
+    // body, carried high on the legs
+    ctx.beginPath(); ctx.ellipse(-0.02*s,-0.26*s,0.29*s,0.175*s,-0.10,0,7); ctx.fill();
+    // underside shading, clipped to the body so it never spills onto the grass
+    ctx.save(); ctx.clip();
+    ctx.fillStyle=sk.shade; ctx.fillRect(-0.4*s,-0.22*s,0.8*s,0.4*s);
     ctx.restore();
-    // ripples last, so they spread across the surface the bird went under
-    if (drown) this.drawRipples(x, yBase, t);
+    // folded wing
+    ctx.fillStyle=sk.wing; ctx.beginPath();
+    ctx.ellipse(-0.075*s,-0.255*s,0.16*s,0.075*s,-0.13,0,7); ctx.fill();
+
+    // neck: the swept circles built once at load, scaled to this bird and
+    // filled as one path so the overlaps union instead of banding
+    ctx.fillStyle=sk.body; ctx.beginPath();
+    for (let i=0;i<FLAMINGO_NECK.length;i+=3){
+      const nx=FLAMINGO_NECK[i]*s, ny=FLAMINGO_NECK[i+1]*s, nr=FLAMINGO_NECK[i+2]*s;
+      ctx.moveTo(nx+nr,ny); ctx.arc(nx,ny,nr,0,7);
+    }
+    ctx.fill();
+
+    // head
+    ctx.fillStyle=sk.head||sk.body; ctx.beginPath();
+    ctx.ellipse(0.22*s,-0.90*s,0.115*s,0.10*s,-0.12,0,7); ctx.fill();
+
+    // Bill: pale at the base, kinked sharply down at the halfway point, outer
+    // third black. The kink is the single most flamingo thing about it. The
+    // black is a clipped half-plane rather than a second traced outline, so it
+    // can never creep outside the bill however the curve is tuned.
+    const bill=()=>{ ctx.beginPath();
+      ctx.moveTo(0.27*s,-0.945*s); ctx.lineTo(0.50*s,-0.905*s);
+      ctx.quadraticCurveTo(0.525*s,-0.840*s, 0.450*s,-0.785*s);
+      ctx.lineTo(0.420*s,-0.822*s);
+      ctx.quadraticCurveTo(0.40*s,-0.865*s, 0.27*s,-0.865*s);
+      ctx.closePath(); };
+    ctx.fillStyle=sk.beak; bill(); ctx.fill();
+    ctx.save(); bill(); ctx.clip();
+    ctx.translate(0.45*s,-0.88*s); ctx.rotate(0.30);
+    ctx.fillStyle=sk.beakTip; ctx.fillRect(0,-2*s,3*s,4*s);
+    ctx.restore();
+
+    // eyes -- near one full size, far one small on the turned head, so it still
+    // reads as one of the family rather than a profile cut-out
+    ctx.fillStyle="#222";
+    ctx.beginPath(); ctx.arc(0.240*s,-0.925*s,0.042*s,0,7); ctx.fill();
+    ctx.beginPath(); ctx.arc(0.155*s,-0.918*s,0.028*s,0,7); ctx.fill();
+    if (this.dead){ ctx.strokeStyle="#222"; ctx.lineWidth=s*0.038; ctx.beginPath();
+      ctx.moveTo(0.202*s,-0.963*s); ctx.lineTo(0.278*s,-0.887*s);
+      ctx.moveTo(0.278*s,-0.963*s); ctx.lineTo(0.202*s,-0.887*s);
+      ctx.moveTo(0.127*s,-0.950*s); ctx.lineTo(0.183*s,-0.886*s);
+      ctx.moveTo(0.183*s,-0.950*s); ctx.lineTo(0.127*s,-0.886*s); ctx.stroke(); }
   },
 
   // Three rings staggered in time, each expanding and thinning as it fades --
@@ -1163,6 +1275,24 @@ const Game = {
   },
 };
 
+/* The flamingo's neck, in units of s, built once at load: circle centres and
+   radii swept along an S-curve, tapering toward the head.
+   Offsetting the curve into a ribbon looked obvious and was wrong -- on a bend
+   this tight the inner edge folds over itself and leaves a notch at the
+   shoulder. A union of circles cannot self-intersect, and filled as one path
+   with nonzero winding it is still a single fill. */
+const FLAMINGO_NECK = (() => {
+  const P = [[0.06,-0.36],[0.28,-0.57],[0.05,-0.75],[0.22,-0.90]];
+  const N = 26, out = new Float32Array((N+1)*3);
+  for (let i=0;i<=N;i++){
+    const u = i/N, v = 1-u;
+    out[i*3]   = v*v*v*P[0][0] + 3*v*v*u*P[1][0] + 3*v*u*u*P[2][0] + u*u*u*P[3][0];
+    out[i*3+1] = v*v*v*P[0][1] + 3*v*v*u*P[1][1] + 3*v*u*u*P[2][1] + u*u*u*P[3][1];
+    out[i*3+2] = (0.115 - 0.045*u)/2;         // half-width: shoulder -> head
+  }
+  return out;
+})();
+
 /* Per-avatar sprite skins — the playable character matches the profile avatar. */
 const SKINS = {
   "🐔": { body:"#fff",    shade:"rgba(0,0,0,0.06)",       beak:"#f0a500", legs:"#f0a500", comb:"#e8403a", wattle:"#e8403a" },
@@ -1172,7 +1302,7 @@ const SKINS = {
   "🦆": { body:"#9c8f80", shade:"rgba(0,0,0,0.10)",       beak:"#fdd835", legs:"#f28c28", head:"#2e7d32", ring:"#fff", flatBill:true },
   "🐧": { body:"#263238", shade:"rgba(0,0,0,0.2)",        beak:"#f28c28", legs:"#f28c28", belly:"#fff" },
   "🦉": { body:"#8d6e63", shade:"rgba(0,0,0,0.12)",       beak:"#fdd835", legs:"#a1887f", disc:"#d7ccc8", bigEyes:true, tufts:"#6d4c41" },
-  "🦩": { body:"#f48fb1", shade:"rgba(0,0,0,0.07)",       beak:"#f8bbd0", legs:"#ec407a", beakTip:"#37474f", longLegs:true },
+  "🦩": { body:"#f79ac0", shade:"rgba(198,40,110,0.16)",  beak:"#f7d3e2", legs:"#ef7da3", beakTip:"#2b2b33", head:"#fbb3d0", wing:"#f07fae", plan:"flamingo" },
   "🦜": { body:"#e53935", shade:"rgba(25,50,160,0.28)",   beak:"#eceff1", legs:"#78909c", tuft:"#fdd835" },
   "🦚": { body:"#00897b", shade:"rgba(13,71,161,0.28)",   beak:"#f0a500", legs:"#455a64", head:"#1565c0", tail:"#43a047", crown:"#1565c0" },
   "🦢": { body:"#fff",    shade:"rgba(0,0,0,0.05)",       beak:"#f57f17", legs:"#455a64", flatBill:true, mask:"#212121" },
