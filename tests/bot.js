@@ -46,10 +46,17 @@ function fakeDom() {
   };
 }
 
+// The game's js/ files, in the order index.html loads them -- read from the
+// page rather than listed here, so a new file or a reordering can never leave
+// the tests running something the browser doesn't.
+function gameFiles(html) {
+  const files = [...html.matchAll(/<script src="(js\/[^"]+)"><\/script>/g)].map((m) => m[1]);
+  if (!files.length) throw new Error("no js/ script tags found in index.html");
+  return files;
+}
+
 function loadGame() {
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
-  const inline = html.match(/<script>([\s\S]*?)<\/script>/);   // the one with no src=
-  if (!inline) throw new Error("could not find the inline game script in index.html");
 
   const sandbox = loadScripts({
     baseDir: path.join(ROOT, "lib"),
@@ -67,28 +74,26 @@ function loadGame() {
       URLSearchParams,
     },
   });
-  // Top-level const/let in a runInContext program are not visible to a later
-  // runInContext call (see test-harness.js), and the game's script is wrapped
-  // in an IIFE besides -- so anything a test needs out of its scope has to be
-  // copied onto the sandbox from INSIDE the closure, before it returns.
-  const escape = [
-    "",
-    ";globalThis.SKINS = SKINS;",
-    "globalThis.setReduceMotion = (v) => { REDUCE_MOTION = v; };",
-    "",
-  ].join("\n");
-  const body = inline[1];
-  const close = body.lastIndexOf("})();");
-  if (close < 0) throw new Error("could not find the end of the game's IIFE");
-  const source = body.slice(0, close) + escape + body.slice(close);
-  vm.runInContext(source, sandbox, { filename: "chicken-cross-inline.js" });
+
+  // One program, not one per file: top-level const/let in a runInContext call
+  // is not visible to a later one (see test-harness.js), and these files share
+  // their scope in the browser. The tail copies out the few bindings the tests
+  // need, which is the same reason the harness appends its own.
+  const source = gameFiles(html)
+    .map((f) => fs.readFileSync(path.join(ROOT, f), "utf8"))
+    .concat([
+      ";globalThis.SKINS = SKINS;",
+      "globalThis.setReduceMotion = (v) => { REDUCE_MOTION = v; };",
+    ])
+    .join("\n");
+  vm.runInContext(source, sandbox, { filename: "chicken-cross.js" });
 
   const { Game, App, LEVELS } = sandbox;
   if (!Game || !App || !LEVELS) throw new Error("game globals missing after load");
+  if (typeof Game.render !== "function") throw new Error("js/render.js did not load");
   App.profile = { id: "__bot__", name: "Bot", avatar: "🐔" };
   Game.boot();
-  // sandbox carries SKINS and setReduceMotion, copied out of the game's
-  // lexical scope above, for the skin tests.
+  // sandbox carries SKINS and setReduceMotion for the skin tests.
   return { Game, App, LEVELS, sandbox };
 }
 

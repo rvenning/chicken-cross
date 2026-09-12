@@ -1,0 +1,60 @@
+/* Game theme + game-specific styles; shared primitives come from gamekit. */
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; height: 100%; overflow: hidden;
+  background: #1c2a33; font-family: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  user-select: none; -webkit-user-select: none; color: #fff;
+  -webkit-touch-callout: none; overscroll-behavior: none;
+}
+/* Gameplay locks all touch gestures (swipes drive the chick, no pinch/pan).
+   Menu screens deliberately don't, so low-vision players can pinch-zoom to
+   read them -- an accessibility requirement the old page-wide lock broke. */
+#screen-game { touch-action: none; }
+canvas { position: fixed; inset: 0; margin: auto; display: block; background: #6bbf4a;
+         touch-action: none; }
+
+/* ---------- Screens (variants on top of gamekit .screen) ---------- */
+.screen.opaque { background:
+    radial-gradient(120% 80% at 50% -10%, #a9e6ff 0%, #6fc3f0 40%, #3f9be0 100%); }
+.screen.game { background: transparent; pointer-events: none; }
+
+/* ---------- Map / worlds ---------- */
+.player-chip { display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.95);
+               color:#12232e; border-radius:16px; padding:8px 14px; font-weight:800; font-size:17px; }
+.player-chip .pmeta { font-weight:600; font-size:13px; opacity:.75; }
+.world-card { background:rgba(255,255,255,.96); color:#12232e; border-radius:20px;
+              padding:16px; margin:14px 0; box-shadow:0 8px 0 rgba(0,0,0,.12);
+              background-image: linear-gradient(180deg, var(--wa,#eee) 0%, #ffffff 60%); }
+.world-card.locked { filter:grayscale(.6) opacity(.7); }
+.world-head { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+.world-emoji { font-size:34px; }
+.world-name { font-weight:900; font-size:20px; }
+.world-tag { font-size:13px; opacity:.7; }
+.world-count { margin-left:auto; font-weight:800; opacity:.8; }
+.dots { display:flex; gap:10px; flex-wrap:wrap; }
+.lvl-dot { width:46px; height:46px; border-radius:13px; border:none; font-size:16px; font-weight:900;
+           cursor:pointer; color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.lvl-dot small { font-size:9px; line-height:1; margin-top:1px; }
+.lvl-dot.done { background:#43c65a; box-shadow:0 4px 0 #2f9a41; }
+.lvl-dot.next { background:#ffb32b; box-shadow:0 4px 0 #d98e12; animation:pulse 1.2s infinite; }
+.lvl-dot.locked { background:#b8c0c8; box-shadow:0 4px 0 #8d97a1; cursor:not-allowed; }
+@keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+
+/* ---------- Game HUD ---------- */
+#gbar { position:fixed; top:0; left:0; right:0; display:flex; align-items:center; gap:10px;
+        padding: calc(12px + env(safe-area-inset-top)) 14px 12px; pointer-events:none; }
+#gbar .iconbtn { pointer-events:auto; }
+#gbar .pill { pointer-events:none; background:rgba(0,0,0,.35); border-radius:14px;
+              padding:8px 14px; font-weight:900; font-size:18px; color:#fff;
+              text-shadow:0 2px 0 rgba(0,0,0,.3); }
+#g-progress { flex:1; text-align:center; }
+
+/* result modal stars/coins */
+.stars { font-size:40px; letter-spacing:6px; margin:8px 0; }
+.bigscore { font-size:44px; font-weight:900; margin:4px 0; }
+
+/* ---------- Touch devices (game-specific; kit covers the rest) ---------- */
+@media (pointer: coarse) {
+  .lvl-dot { width:56px; height:56px; font-size:18px; border-radius:16px; }
+  .lvl-dot small { font-size:11px; }
+}
