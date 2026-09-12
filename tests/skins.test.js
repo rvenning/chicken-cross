@@ -8,16 +8,16 @@
 // neither shows up in a balance run, and both look "nearly right" in a
 // screenshot. So they get asserted instead.
 //
-// The reduced-motion check is here rather than in the browser because
-// REDUCE_MOTION is a script-scoped `let`: reachable from inside the vm context
-// the game was loaded into, and from nowhere else.
+// The reduced-motion check is here rather than in the browser because there is
+// no viewport emulation for prefers-reduced-motion; Art.motion is the one flag
+// the whole art layer multiplies by, so setting it is the whole test.
 
 const { test } = require("node:test");
 const assert = require("node:assert");
 const { loadGame } = require("./bot.js");
 
-const { Game, sandbox } = loadGame();
-const { SKINS, setReduceMotion } = sandbox;
+const { sandbox } = loadGame();
+const { SKINS, Art } = sandbox;
 const FLAMINGO = "\u{1F9A9}";
 
 // Which fields each painter actually reads. Kept as data so adding a skin
@@ -36,8 +36,8 @@ test("every skin declares a body plan something actually paints", () => {
   }
   // and the painters it names all exist
   for (const plan of PLANS) {
-    const fn = "paint" + plan[0].toUpperCase() + plan.slice(1);
-    assert.equal(typeof Game[fn], "function", `Game.${fn} is missing`);
+    const fn = "bird" + plan[0].toUpperCase() + plan.slice(1);
+    assert.equal(typeof Art[fn], "function", `Art.${fn} is missing`);
   }
 });
 
@@ -60,7 +60,7 @@ function recorder() {
     save: noop, restore: noop, clip: noop, beginPath: noop, closePath: noop,
     fill: noop, stroke: noop, fillRect: noop, translate: noop, rotate: noop,
     scale: noop, arc: noop, ellipse: noop, quadraticCurveTo: noop,
-    bezierCurveTo: noop,
+    bezierCurveTo: noop, drawImage: noop,
     moveTo(x, y) { pts.push(["moveTo", x, y]); },
     lineTo(x, y) { pts.push(["lineTo", x, y]); },
   };
@@ -70,20 +70,13 @@ function recorder() {
 // leg's foot ended up. s=1 so the numbers are the painter's own units.
 function footY(idleSeconds) {
   const ctx = recorder();
-  const saved = { ctx: Game.ctx, elapsed: Game.elapsed, dead: Game.dead, moved: Game._movedAt };
-  Game.ctx = ctx;
-  Game.dead = false;
-  Game.elapsed = 100;
-  Game._movedAt = 100 - idleSeconds;
-  Game.paintFlamingo(1, SKINS[FLAMINGO]);
-  Game.ctx = saved.ctx; Game.elapsed = saved.elapsed;
-  Game.dead = saved.dead; Game._movedAt = saved.moved;
+  Art.birdFlamingo(ctx, 1, SKINS[FLAMINGO], { dead: false, idle: idleSeconds });
   // the far leg is drawn first: moveTo(hip), lineTo(knee), lineTo(foot)
   return ctx.pts[2][2];
 }
 
 test("the flamingo's tuck eases, and snaps instead under reduced motion", () => {
-  const setRM = setReduceMotion;
+  const setRM = (on) => { Art.motion = on ? 0 : 1; };
 
   setRM(false);
   const down = footY(0.0), mid = footY(0.87), up = footY(3.0);
@@ -98,15 +91,11 @@ test("the flamingo's tuck eases, and snaps instead under reduced motion", () => 
 });
 
 test("the tucked leg stays hidden behind the body", () => {
-  const saved = Game.ctx;
   const ctx = recorder();
-  Game.ctx = ctx;
-  Game.dead = false; Game.elapsed = 100; Game._movedAt = 0;
-  Game.paintFlamingo(1, SKINS[FLAMINGO]);
-  Game.ctx = saved;
+  Art.birdFlamingo(ctx, 1, SKINS[FLAMINGO], { dead: false, idle: 3 });
   // body ellipse spans y -0.435..-0.085; a folded foot poking below that shows
   const [, , kneeY] = ctx.pts[1];
-  const [, , foot]  = ctx.pts[2];
+  const [, , foot] = ctx.pts[2];
   assert.ok(foot < -0.085, `tucked foot at ${foot} hangs below the body`);
   assert.ok(kneeY < -0.085, `tucked knee at ${kneeY} hangs below the body`);
 });

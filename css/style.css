@@ -1,8 +1,59 @@
-/* Game theme + game-specific styles; shared primitives come from gamekit. */
+/* Chicken Cross — game theme and chrome. Shared primitives come from gamekit
+   (lib/gk-base.css), which is vendored: never edit it, re-theme through the
+   --gk-* properties below and override specific rules here.
+
+   EVERYTHING in this file is built from the tokens in :root. A one-off pixel
+   value further down is a bug in this file, not a decision -- it is the thing
+   that makes two panels on two screens drift apart six months from now. */
+
+:root {
+  /* colour */
+  --cc-sky:      #3f9be0;
+  --cc-sky-hi:   #a9e6ff;
+  --cc-deep:     #12232e;
+  --cc-ink:      #1c2a33;
+  --cc-paper:    #ffffff;
+  --cc-gold:     #ffb32b;
+  --cc-gold-lo:  #d98e12;
+  --cc-green:    #43c65a;
+  --cc-green-lo: #2f9a41;
+  --cc-stone:    #b8c0c8;
+  --cc-stone-lo: #8d97a1;
+  --cc-danger:   #e8403a;
+
+  /* surfaces, for panels that sit on the game's own dark ground */
+  --cc-s1:   rgba(255,255,255,.075);
+  --cc-s2:   rgba(255,255,255,.13);
+  --cc-line: rgba(255,255,255,.16);
+  --cc-scrim: rgba(0,0,0,.35);
+
+  /* space */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 22px; --sp-6: 30px;
+
+  /* radius */
+  --r-1: 9px; --r-2: 13px; --r-3: 17px; --r-4: 22px; --r-pill: 999px;
+
+  /* depth */
+  --sh-1: 0 2px 0 rgba(0,0,0,.16);
+  --sh-2: 0 6px 0 rgba(0,0,0,.14);
+  --sh-3: 0 12px 26px rgba(0,0,0,.26);
+  --sh-in: inset 0 1px 0 rgba(255,255,255,.14);
+
+  /* motion */
+  --t-fast: 110ms; --t-mid: 210ms; --t-slow: 420ms;
+  --ease: cubic-bezier(.22,.68,.36,1);
+  --ease-pop: cubic-bezier(.34,1.5,.64,1);
+
+  /* type */
+  --fs-hero: clamp(34px, 10vw, 56px);
+  --fs-h2: 21px; --fs-body: 14px; --fs-small: 13px; --fs-tiny: 11px;
+}
+
 * { box-sizing: border-box; }
 html, body {
   margin: 0; padding: 0; height: 100%; overflow: hidden;
-  background: #1c2a33; font-family: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  background: var(--cc-ink);
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
   user-select: none; -webkit-user-select: none; color: #fff;
   -webkit-touch-callout: none; overscroll-behavior: none;
 }
@@ -10,51 +61,187 @@ html, body {
    Menu screens deliberately don't, so low-vision players can pinch-zoom to
    read them -- an accessibility requirement the old page-wide lock broke. */
 #screen-game { touch-action: none; }
-canvas { position: fixed; inset: 0; margin: auto; display: block; background: #6bbf4a;
-         touch-action: none; }
+#c { position: fixed; inset: 0; margin: auto; display: block; background: #6bbf4a;
+     touch-action: none; }
 
 /* ---------- Screens (variants on top of gamekit .screen) ---------- */
 .screen.opaque { background:
-    radial-gradient(120% 80% at 50% -10%, #a9e6ff 0%, #6fc3f0 40%, #3f9be0 100%); }
+    radial-gradient(120% 80% at 50% -10%, var(--cc-sky-hi) 0%, #6fc3f0 40%, var(--cc-sky) 100%); }
 .screen.game { background: transparent; pointer-events: none; }
 
+/* ---------- Splash hero ---------- */
+/* The player's own bird, drawn by the same painter the game uses, so the
+   splash can never drift from what you are about to control. */
+.hero { display: block; margin: 0 auto var(--sp-2); width: 132px; height: 122px; }
+@media (max-height: 560px) { .hero { width: 92px; height: 86px; } }
+@media (orientation: landscape) and (max-height: 460px) { .hero { display: none; } }
+
+/* ---------- Buttons ---------- */
+/* gk-base gives the fill, the 3D lip and :active/:disabled. The states below
+   are what make a button feel touchable rather than printed. */
+.btn, .iconbtn, .lvl-dot {
+  transition: transform var(--t-fast) var(--ease),
+              box-shadow var(--t-fast) var(--ease),
+              filter var(--t-fast) var(--ease);
+}
+/* Gated, because a touch device that emulates hover leaves the button stuck
+   in its hover state after a tap, which looks like a bug. */
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover:not(:disabled),
+  .iconbtn:hover:not(:disabled),
+  .lvl-dot:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.07); }
+}
+.btn:active:not(:disabled),
+.lvl-dot:active:not(:disabled) { transform: translateY(3px); box-shadow: var(--sh-1); }
+.btn:disabled, .lvl-dot:disabled { filter: grayscale(.5) brightness(.85); }
+.btn:focus-visible, .iconbtn:focus-visible, .lvl-dot:focus-visible {
+  outline: 3px solid var(--cc-gold); outline-offset: 3px;
+}
+
 /* ---------- Map / worlds ---------- */
-.player-chip { display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.95);
-               color:#12232e; border-radius:16px; padding:8px 14px; font-weight:800; font-size:17px; }
-.player-chip .pmeta { font-weight:600; font-size:13px; opacity:.75; }
-.world-card { background:rgba(255,255,255,.96); color:#12232e; border-radius:20px;
-              padding:16px; margin:14px 0; box-shadow:0 8px 0 rgba(0,0,0,.12);
-              background-image: linear-gradient(180deg, var(--wa,#eee) 0%, #ffffff 60%); }
-.world-card.locked { filter:grayscale(.6) opacity(.7); }
-.world-head { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
-.world-emoji { font-size:34px; }
-.world-name { font-weight:900; font-size:20px; }
-.world-tag { font-size:13px; opacity:.7; }
-.world-count { margin-left:auto; font-weight:800; opacity:.8; }
-.dots { display:flex; gap:10px; flex-wrap:wrap; }
-.lvl-dot { width:46px; height:46px; border-radius:13px; border:none; font-size:16px; font-weight:900;
-           cursor:pointer; color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; }
-.lvl-dot small { font-size:9px; line-height:1; margin-top:1px; }
-.lvl-dot.done { background:#43c65a; box-shadow:0 4px 0 #2f9a41; }
-.lvl-dot.next { background:#ffb32b; box-shadow:0 4px 0 #d98e12; animation:pulse 1.2s infinite; }
-.lvl-dot.locked { background:#b8c0c8; box-shadow:0 4px 0 #8d97a1; cursor:not-allowed; }
-@keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+.player-chip {
+  display: flex; align-items: center; gap: var(--sp-2);
+  background: rgba(255,255,255,.95); color: var(--cc-deep);
+  border-radius: var(--r-3); padding: var(--sp-2) var(--sp-4);
+  font-weight: 800; font-size: 17px; box-shadow: var(--sh-1);
+}
+.player-chip .pmeta { font-weight: 600; font-size: var(--fs-small); opacity: .75;
+                      font-variant-numeric: tabular-nums; }
+
+.world-card {
+  position: relative;
+  background: var(--cc-paper); color: var(--cc-deep);
+  border-radius: var(--r-4); padding: var(--sp-4);
+  margin: var(--sp-4) 0; box-shadow: var(--sh-2);
+  background-image: linear-gradient(180deg, var(--wa, #eee) 0%, #ffffff 62%);
+  overflow: hidden;
+}
+/* The world's own colour as a lip along the top, so a card is identifiably
+   ITS world at a glance and not just another white panel. */
+.world-card::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 6px;
+  background: var(--wb, var(--cc-sky));
+}
+.world-card.locked { filter: grayscale(.6) opacity(.7); }
+.world-head { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-3); }
+.world-emoji { font-size: 34px; line-height: 1; }
+.world-name { font-weight: 900; font-size: 20px; }
+.world-tag { font-size: var(--fs-small); opacity: .7; }
+.world-count { margin-left: auto; font-weight: 800; opacity: .8;
+               font-variant-numeric: tabular-nums; }
+
+.dots { display: flex; gap: 10px; flex-wrap: wrap; }
+.lvl-dot {
+  width: 46px; height: 46px; border-radius: var(--r-2); border: none;
+  font-size: 16px; font-weight: 900; cursor: pointer; color: #fff;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.lvl-dot small { font-size: 9px; line-height: 1; margin-top: 1px;
+                 font-variant-numeric: tabular-nums; }
+.lvl-dot.done   { background: var(--cc-green); box-shadow: 0 4px 0 var(--cc-green-lo); }
+.lvl-dot.next   { background: var(--cc-gold);  box-shadow: 0 4px 0 var(--cc-gold-lo);
+                  animation: pulse 1.2s infinite; }
+.lvl-dot.locked { background: var(--cc-stone); box-shadow: 0 4px 0 var(--cc-stone-lo);
+                  cursor: not-allowed; }
+@keyframes pulse { 0%,100% { transform: scale(1) } 50% { transform: scale(1.08) } }
 
 /* ---------- Game HUD ---------- */
-#gbar { position:fixed; top:0; left:0; right:0; display:flex; align-items:center; gap:10px;
-        padding: calc(12px + env(safe-area-inset-top)) 14px 12px; pointer-events:none; }
-#gbar .iconbtn { pointer-events:auto; }
-#gbar .pill { pointer-events:none; background:rgba(0,0,0,.35); border-radius:14px;
-              padding:8px 14px; font-weight:900; font-size:18px; color:#fff;
-              text-shadow:0 2px 0 rgba(0,0,0,.3); }
-#g-progress { flex:1; text-align:center; }
+#gbar {
+  position: fixed; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; gap: 10px;
+  padding: calc(var(--sp-3) + env(safe-area-inset-top)) var(--sp-4) var(--sp-3);
+  pointer-events: none;
+}
+#gbar .iconbtn { pointer-events: auto; }
+#gbar .pill {
+  pointer-events: none; background: var(--cc-scrim); border-radius: var(--r-2);
+  padding: var(--sp-2) var(--sp-4); font-weight: 900; font-size: 18px; color: #fff;
+  text-shadow: 0 2px 0 rgba(0,0,0,.3);
+  box-shadow: var(--sh-in);
+  /* so a counter ticking over doesn't shuffle the pill's width */
+  font-variant-numeric: tabular-nums;
+  /* transform does nothing on an inline element, and .pill is a <span> */
+  display: inline-block;
+}
+/* On a monitor a progress pill stretched across 1200px reads as a loading bar
+   rather than as game state, so cap it and centre it -- but width:100% is
+   load-bearing: a flex item with an auto cross-axis margin otherwise sizes to
+   its content, which collapsed this to its minimum and wrapped "0 / 39" onto
+   two lines on a phone. */
+#g-progress {
+  flex: 1; text-align: center;
+  width: 100%; max-width: 420px; margin-inline: auto;
+  white-space: nowrap;
+}
+
+.pill.pop { animation: pillpop var(--t-mid) var(--ease-pop); }
+@keyframes pillpop { 0% { transform: scale(1) } 40% { transform: scale(1.16) } 100% { transform: scale(1) } }
+
+/* ---------- Modals ---------- */
+/* A sheet that simply appears reads as unfinished. */
+.modal.show .sheet { animation: sheetin var(--t-mid) var(--ease-pop); }
+@keyframes sheetin {
+  from { opacity: 0; transform: translateY(14px) scale(.96); }
+  to   { opacity: 1; transform: none; }
+}
 
 /* result modal stars/coins */
-.stars { font-size:40px; letter-spacing:6px; margin:8px 0; }
-.bigscore { font-size:44px; font-weight:900; margin:4px 0; }
+.stars { font-size: 40px; letter-spacing: 6px; margin: var(--sp-2) 0; }
+.stars span { display: inline-block; animation: stardrop var(--t-slow) var(--ease-pop) backwards; }
+.stars span:nth-child(1) { animation-delay: 60ms; }
+.stars span:nth-child(2) { animation-delay: 220ms; }
+.stars span:nth-child(3) { animation-delay: 380ms; }
+@keyframes stardrop {
+  from { opacity: 0; transform: translateY(-18px) scale(.5) rotate(-25deg); }
+  to   { opacity: 1; transform: none; }
+}
+.bigscore { font-size: 44px; font-weight: 900; margin: var(--sp-1) 0;
+            font-variant-numeric: tabular-nums; }
+
+/* ---------- gk-base overrides ---------- */
+/* The roster and the leaderboard default to white cards, which is the one
+   place the app visibly stops looking like itself: they sit on the game's own
+   dark ground. The .sheet modals stay light -- they are meant to be. */
+.lb-row {
+  background: var(--cc-s1); color: #fff; border: 1px solid var(--cc-line);
+  border-radius: var(--r-2); box-shadow: none;
+  font-variant-numeric: tabular-nums;
+}
+.lb-row.me { background: var(--cc-s2); border-color: rgba(255,255,255,.34); }
+
+/* ---------- Responsive ---------- */
+/* Phone landscape is the tight one: 375px of height with a hero, a title and
+   two buttons in it. The decorative half gives up its room first. */
+@media (max-height: 560px) {
+  .world-card { margin: var(--sp-3) 0; padding: var(--sp-3); }
+  .world-emoji { font-size: 28px; }
+  .stars { font-size: 32px; }
+  .bigscore { font-size: 34px; }
+}
+@media (orientation: landscape) and (max-height: 460px) {
+  .world-tag { display: none; }
+  .world-head { margin-bottom: var(--sp-2); }
+}
+/* Tablet and desktop: stop the map sprawling across the full width. */
+@media (min-width: 720px) {
+  #world-list, #lb-list { max-width: 620px; width: 100%; margin-inline: auto; }
+}
 
 /* ---------- Touch devices (game-specific; kit covers the rest) ---------- */
+/* 44px is the floor; the hands using this are four and seven years old. */
 @media (pointer: coarse) {
-  .lvl-dot { width:56px; height:56px; font-size:18px; border-radius:16px; }
-  .lvl-dot small { font-size:11px; }
+  .lvl-dot { width: 56px; height: 56px; font-size: 18px; border-radius: var(--r-3); }
+  .lvl-dot small { font-size: 11px; }
+}
+
+/* ---------- Reduced motion ---------- */
+/* The canvas half is one flag, Art.motion, set in js/render.js. This is the
+   DOM half. Focus rings and colour state changes are left alone: they are
+   information, not decoration. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
 }

@@ -1,4 +1,4 @@
-// The campaign: six worlds of four levels, plus the endless mode's parameters.
+// The campaign: ten worlds of four levels, plus the endless mode's parameters.
 "use strict";
 
 // Worlds -> levels. Each level = target distance + difficulty params + theme.
@@ -65,6 +65,8 @@ WORLDS.forEach((world, wi) => {
       params: {
         weights: world.w,
         theme: world.theme,
+        wi,                        // which world's art; the simulation ignores it
+
         carMin: ramp(1.5, 3.0),
         carMax: ramp(3.0, 5.2),
         truckChance: ramp(0.22, 0.34),

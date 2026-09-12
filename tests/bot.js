@@ -83,7 +83,7 @@ function loadGame() {
     .map((f) => fs.readFileSync(path.join(ROOT, f), "utf8"))
     .concat([
       ";globalThis.SKINS = SKINS;",
-      "globalThis.setReduceMotion = (v) => { REDUCE_MOTION = v; };",
+      "globalThis.Art = Art;",
     ])
     .join("\n");
   vm.runInContext(source, sandbox, { filename: "chicken-cross.js" });

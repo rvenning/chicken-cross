@@ -51,7 +51,29 @@ const App = {
   showScreen(name) { GK.UI.showScreen(name); },
 
   // One-tap "Continue as <last player>" on the splash; Play becomes Switch.
+  // The hero bird. Same painter as the game, at a size the canvas picks, so a
+  // new skin shows up here the moment it exists.
+  drawHero() {
+    const c = this.el("hero");
+    if (!c || !c.getContext) return;
+    const g = c.getContext("2d");
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = 264, h = 244;
+    if (c.width !== w * dpr) { c.width = w * dpr; c.height = h * dpr; }
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    const last = GK.Profiles.lastProfile();
+    const sk = SKINS[(this.profile && this.profile.avatar) || (last && last.avatar)] || SKINS["🐔"];
+    g.save(); g.translate(w / 2, h * 0.84);
+    g.globalAlpha = 0.30;
+    Art.blob(g, 0, 8, 62, 17, "rgba(20,40,60,1)");
+    g.globalAlpha = 1;
+    Art.bird(g, 112, sk, { dead: false, idle: 3 });   // idle: the flamingo tucks
+    g.restore();
+  },
+
   refreshSplash() {
+    this.drawHero();
     const last = GK.Profiles.lastProfile();
     const cont = this.el("btn-continue-as"), play = this.el("btn-play");
     if (last) {
@@ -80,6 +102,7 @@ const App = {
       const wUnlocked = start<=unlocked;
       const card=document.createElement("div"); card.className="world-card"+(wUnlocked?"":" locked");
       card.style.setProperty("--wa", world.accent);
+      card.style.setProperty("--wb", world.theme.bg);
       const dots=[];
       for (let j=0;j<LEVELS_PER_WORLD;j++){ const gi=start+j; const lv=LEVELS[gi];
         const rec=g.levels[gi];
@@ -109,7 +132,7 @@ const App = {
     Sfx.click();
     // hardest params for a proper endless challenge
     const params={ weights:{ grass:0.32, road:0.40, water:0.16, rail:0.12 },
-      theme:WORLDS[4].theme, carMin:2.0, carMax:4.2, truckChance:0.3, creep:0.6, coinRate:0.4, railFast:15 };
+      theme:WORLDS[4].theme, wi:4, carMin:2.0, carMax:4.2, truckChance:0.3, creep:0.6, coinRate:0.4, railFast:15 };
     Game.begin({ mode:"endless", params, target:0 });
   },
 
@@ -120,7 +143,7 @@ const App = {
       const next = Game.level.gi+1;
       const hasNext = next<LEVELS.length;
       sheet.innerHTML=`<h2>${Game.level.world.emoji} Level Complete!</h2>
-        <div class="stars">${"★".repeat(res.stars)}${"☆".repeat(3-res.stars)}</div>
+        <div class="stars">${[0,1,2].map(i=>`<span>${i<res.stars?"★":"☆"}</span>`).join("")}</div>
         <p>🪙 ${res.coins} coins collected</p>
         <div class="row-btns2">
           <button class="btn grey" id="r-map">🗺️ Map</button>

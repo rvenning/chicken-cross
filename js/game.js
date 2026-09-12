@@ -15,13 +15,6 @@ const CONFETTI_COLORS = ["#ffd93b","#e8403a","#4fc3f7","#7ac74f","#ff9f43","#c77
 const HOP_TIME = 0.11;
 const REVIVE_COST = 50;
 
-// Players who ask their OS for reduced motion get no camera shake, and the
-// rail warning light holds steady instead of flashing. Cached with a live
-// listener so toggling the OS setting takes effect without a reload.
-let REDUCE_MOTION = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-if (window.matchMedia) window.matchMedia("(prefers-reduced-motion: reduce)")
-  .addEventListener("change", e => { REDUCE_MOTION = e.matches; });
-
 
 const Game = {
   canvas: null, ctx: null, W:0, H:0, TILE:60, DPR:1,
