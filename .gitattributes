@@ -1,0 +1,6 @@
+# The repo stores LF. Without this, Windows checks files out as CRLF while the
+# tooling here writes LF, so every file ends up with MIXED line endings -- which
+# silently breaks any script that splits on "\r\n" and made a line-based edit
+# join two lines together more than once.
+* text=auto eol=lf
+*.png binary

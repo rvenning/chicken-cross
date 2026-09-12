@@ -21,16 +21,27 @@ const { SKINS, Art } = sandbox;
 const FLAMINGO = "\u{1F9A9}";
 
 // Which fields each painter actually reads. Kept as data so adding a skin
-// field means updating one list, not hunting through the painter.
-const SHARED = ["body", "shade", "beak", "legs"];
+// field means updating one list, not hunting through the painter. Every skin
+// has a plan now, so there is no shared fallback to list.
+const CORE = ["body", "shade", "beak", "legs"];
 const BY_PLAN = {
-  flamingo: ["body", "shade", "beak", "beakTip", "legs", "head", "wing"],
+  chicken:  CORE.concat(["comb", "wattle"]),
+  rooster:  CORE.concat(["comb", "wattle", "tail"]),
+  chick:    CORE,                                  // tuft and shell are optional
+  duck:     CORE.concat(["head", "ring"]),
+  penguin:  CORE.concat(["belly"]),
+  owl:      CORE.concat(["disc", "tufts"]),
+  flamingo: CORE.concat(["beakTip", "head", "wing"]),
+  parrot:   CORE.concat(["tuft", "wing", "tail"]),
+  peacock:  CORE.concat(["head", "tail", "crown"]),
+  swan:     CORE.concat(["mask"]),
+  dove:     CORE,
 };
 const PLANS = Object.keys(BY_PLAN);
 
 test("every skin declares a body plan something actually paints", () => {
   for (const [key, sk] of Object.entries(SKINS)) {
-    if (sk.plan === undefined) continue;
+    assert.ok(sk.plan, `${key} has no body plan -- it would paint as nothing`);
     assert.ok(PLANS.includes(sk.plan),
       `${key} asks for plan "${sk.plan}", which no painter handles`);
   }
@@ -43,7 +54,7 @@ test("every skin declares a body plan something actually paints", () => {
 
 test("every skin carries the colours its painter reads", () => {
   for (const [key, sk] of Object.entries(SKINS)) {
-    const needed = sk.plan ? BY_PLAN[sk.plan] : SHARED;
+    const needed = BY_PLAN[sk.plan];
     for (const field of needed) {
       assert.equal(typeof sk[field], "string",
         `${key} is missing "${field}", which its painter paints with`);
@@ -98,4 +109,90 @@ test("the tucked leg stays hidden behind the body", () => {
   const [, , foot] = ctx.pts[2];
   assert.ok(foot < -0.085, `tucked foot at ${foot} hangs below the body`);
   assert.ok(kneeY < -0.085, `tucked knee at ${kneeY} hangs below the body`);
+});
+
+// A recorder that tracks the extent of every path coordinate, so the
+// legibility budget is asserted rather than eyeballed.
+//
+// Checked against the real thing: every one of the twelve agrees with the
+// painted pixels (measured with getImageData in the browser) to within
+// 0.004s, because these birds are built from ellipses and short quadratics
+// whose control points sit close to the curve. Tallest is the flamingo at
+// -1.000s against a -1.380s ceiling; widest is the peacock at 1.321s in a
+// 2.000s column.
+//
+// The two things it is here to catch are a new bird with a crest that covers
+// the lane above, and one with a tail that hides the column beside it.
+function bounds() {
+  const b = { top: 1e9, bottom: -1e9, left: 1e9, right: -1e9 };
+  const noop = () => {};
+  // Anything drawn inside a clip is bounded by the clip path, which was
+  // already recorded when it was traced -- so stop recording until the
+  // matching restore(). Without this the flamingo reads as two tiles tall,
+  // because its black bill tip is a huge rect clipped to the bill outline.
+  let clipped = 0;
+  const stack = [];
+  const hit = (x, y) => {
+    if (clipped || !isFinite(x) || !isFinite(y)) return;
+    if (y < b.top) b.top = y;
+    if (y > b.bottom) b.bottom = y;
+    if (x < b.left) b.left = x;
+    if (x > b.right) b.right = x;
+  };
+  const ctx = {
+    b,
+    save: () => stack.push(clipped),
+    restore: () => { clipped = stack.length ? stack.pop() : 0; },
+    clip: () => { clipped++; },
+    beginPath: noop, closePath: noop,
+    fill: noop, stroke: noop, drawImage: noop, scale: noop, rotate: noop,
+    translate: noop,
+    moveTo: hit, lineTo: hit,
+    quadraticCurveTo: (cx, cy, x, y) => { hit(cx, cy); hit(x, y); },
+    bezierCurveTo: (a, c, d, e, x, y) => { hit(a, c); hit(d, e); hit(x, y); },
+    arc: (x, y, r) => { hit(x - r, y - r); hit(x + r, y + r); },
+    // rr() in js/util.js builds its rounded rect out of arcTo
+    arcTo: (x1, y1, x2, y2) => { hit(x1, y1); hit(x2, y2); },
+    ellipse: (x, y, rx, ry) => { hit(x - rx, y - ry); hit(x + rx, y + ry); },
+    rect: (x, y, w, h) => { hit(x, y); hit(x + w, y + h); },
+    fillRect: (x, y, w, h) => { hit(x, y); hit(x + w, y + h); },
+  };
+  return ctx;
+}
+
+// A car in the lane above has its lower edge at -0.69 tiles = -1.38s, and the
+// playfield column the bird stands in is 2s wide. Both are properties of the
+// game, not of the art, which is why they are the numbers asserted here.
+const CEILING = -1.38;
+const HALF_TILE = 1.0;
+
+// Measured at a realistic size and normalised, NOT at s=1: the pen's rim is
+// Math.max(0.8, s * 0.038), and at s=1 that 0.8px floor is most of the bird,
+// which reported the chicken as two and a half tiles wide.
+const MEASURE_S = 200;
+
+test("no bird pokes into the lane above, or out of its own column", () => {
+  for (const [key, sk] of Object.entries(SKINS)) {
+    const ctx = bounds();
+    Art.bird(ctx, MEASURE_S, sk, { dead: false, idle: 3 });
+    const b = ctx.b;
+    for (const k of Object.keys(b)) b[k] /= MEASURE_S;
+    assert.ok(b.top > CEILING,
+      `${key} (${sk.plan}) reaches ${b.top.toFixed(3)}s, into the car band at ${CEILING}s`);
+    assert.ok(b.left > -HALF_TILE && b.right < HALF_TILE,
+      `${key} (${sk.plan}) spans ${b.left.toFixed(3)}..${b.right.toFixed(3)}s, past its own column`);
+    // and it has to actually be on the ground, not hovering
+    assert.ok(b.bottom > 0.3, `${key} (${sk.plan}) stops at ${b.bottom.toFixed(3)}s, short of the ground`);
+  }
+});
+
+test("every plan paints without throwing, alive and dead", () => {
+  for (const [key, sk] of Object.entries(SKINS)) {
+    for (const dead of [false, true]) {
+      for (const idle of [0, 0.9, 4]) {
+        assert.doesNotThrow(() => Art.bird(bounds(), 200, sk, { dead, idle }),
+          `${key} threw with dead=${dead} idle=${idle}`);
+      }
+    }
+  }
 });

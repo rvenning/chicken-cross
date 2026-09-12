@@ -810,11 +810,249 @@ Object.assign(Art, {
 });
 
 /* ------------------------------------------------------------------ birds */
-// The playable character. Both painters take an explicit ctx and a tiny
-// state bag rather than riding on Game, so the splash and results screens
-// can draw the same bird the game draws and it can never drift.
+// The playable character, twelve ways.
+//
+// Rosalie looked at the old flamingo and said it was a chicken painted pink.
+// She was right, and she was right about the other ten too: every skin was the
+// same rounded-rect body with a comb or a tuft or a flat bill bolted on, so a
+// duck was a chicken with a green head and a swan was a chicken with a mask.
+// Colour is the one channel that does not carry species. Each bird now has its
+// own BODY PLAN -- a different silhouette, which is what you actually read at
+// tile size.
+//
+// What stops twelve bespoke birds looking like twelve different games is the
+// pen below: one rim, one highlight, one eye, one way of drawing a limb. Every
+// plan is built from it, so adding a bird is a shape problem and never a style
+// problem.
+//
+// Both painters take an explicit ctx and a small state bag rather than riding
+// on Game, so the splash can draw the same bird the game draws:
 //   st.dead -- cross the eyes
-//   st.idle -- seconds standing still, which is what tucks the flamingo up
+//   st.idle -- seconds standing still (the flamingo tucks a leg up)
+//
+// LEGIBILITY BUDGET, and it binds every one of them: a car in the lane above
+// has its lower edge at -0.69 tiles, which is -1.38s here. No bird's head may
+// go above -1.05s, and none may spread wider than +-0.80s or it starts hiding
+// the lane either side. Both are asserted in tests/skins.test.js against the
+// painted pixels, not against these numbers.
+
+Object.assign(Art, {
+  /* --- the shared pen ------------------------------------------------- */
+
+  // One dark rim and one top highlight for everything, derived from the body
+  // colour so a new bird is a row of data rather than a palette decision.
+  pen(sk, s) {
+    return { line: GK.util.shade(sk.body, -58), lw: Math.max(0.8, s * 0.038) };
+  },
+
+  // Filled ellipse with the rim under it and a highlight over it. The
+  // highlight is skipped on anything tiny, or small birds turn into blobs.
+  bEll(ctx, P, x, y, rx, ry, fill, rot, hi) {
+    const L = Math.min(P.lw, Math.min(rx, ry) * 0.5);
+    ctx.fillStyle = P.line;
+    ctx.beginPath(); ctx.ellipse(x, y, rx + L, ry + L, rot || 0, 0, 7); ctx.fill();
+    ctx.fillStyle = fill;
+    ctx.beginPath(); ctx.ellipse(x, y, rx, ry, rot || 0, 0, 7); ctx.fill();
+    if (hi !== false && rx > P.lw * 2.2) {
+      ctx.fillStyle = "rgba(255,255,255,0.20)";
+      ctx.beginPath();
+      ctx.ellipse(x - rx * 0.20, y - ry * 0.36, rx * 0.58, ry * 0.40, rot || 0, 0, 7);
+      ctx.fill();
+    }
+  },
+
+  bPoly(ctx, P, pts, fill) {
+    const path = (grow) => {
+      ctx.beginPath();
+      let cx = 0, cy = 0;
+      for (const p of pts) { cx += p[0]; cy += p[1]; }
+      cx /= pts.length; cy /= pts.length;
+      pts.forEach(([px, py], i) => {
+        const dx = px - cx, dy = py - cy;
+        const d = Math.hypot(dx, dy) || 1;
+        const gx = px + (dx / d) * grow, gy = py + (dy / d) * grow;
+        ctx[i ? "lineTo" : "moveTo"](gx, gy);
+      });
+      ctx.closePath();
+    };
+    ctx.fillStyle = P.line; path(P.lw); ctx.fill();
+    ctx.fillStyle = fill;   path(0);    ctx.fill();
+  },
+
+  // A limb -- leg, neck, flipper spine. Stroked twice: the rim as a fatter
+  // stroke, then the body colour over it. That is how you outline a stroke,
+  // and it is what stops legs looking like a different drawing from the body.
+  bLimb(ctx, P, pts, w, fill) {
+    const trace = () => {
+      ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.stroke();
+    };
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.strokeStyle = P.line; ctx.lineWidth = w + P.lw * 2; trace();
+    ctx.strokeStyle = fill;   ctx.lineWidth = w;            trace();
+  },
+
+  // A tapered ribbon along a quadratic: tails, crests, sickle feathers. A tail
+  // drawn as a constant-width round stroke reads as a flipper -- the taper is
+  // the whole point. Sampled and offset by the normal, then filled.
+  bRibbon(ctx, P, x0, y0, cx, cy, x1, y1, w0, w1, fill) {
+    const N = 12;
+    // The outline is the same ribbon a rim wider at both ends, not a fat
+    // stroke around it -- a constant stroke swallows the tapered end whole.
+    const build = (g) => {
+      const L = [], R = [];
+      for (let i = 0; i <= N; i++) {
+        const u = i / N, v = 1 - u;
+        const x = v * v * x0 + 2 * v * u * cx + u * u * x1;
+        const y = v * v * y0 + 2 * v * u * cy + u * u * y1;
+        let tx = 2 * v * (cx - x0) + 2 * u * (x1 - cx);
+        let ty = 2 * v * (cy - y0) + 2 * u * (y1 - cy);
+        const d = Math.hypot(tx, ty) || 1; tx /= d; ty /= d;
+        const w = (w0 + (w1 - w0) * u) / 2 + g;
+        L.push([x - ty * w, y + tx * w]); R.push([x + ty * w, y - tx * w]);
+      }
+      ctx.beginPath();
+      ctx.moveTo(L[0][0], L[0][1]);
+      for (let i = 1; i <= N; i++) ctx.lineTo(L[i][0], L[i][1]);
+      for (let i = N; i >= 0; i--) ctx.lineTo(R[i][0], R[i][1]);
+      ctx.closePath();
+    };
+    const rim = Math.min(P.lw, Math.max(w0, w1) * 0.38);
+    ctx.fillStyle = P.line; build(rim); ctx.fill();
+    ctx.fillStyle = fill;   build(0);   ctx.fill();
+  },
+
+  // One eye everywhere. `big` gives it a sclera (owl, chick); otherwise it is
+  // a dark bead, which is what reads at 17px. The glint is what makes it alive.
+  // A folded wing: body colour a shade down, with a lighter leading edge. No
+  // rim -- a wing is part of the same mass, and outlining it makes the bird
+  // look assembled from parts.
+  bWing(ctx, P, sk, x, y, rx, ry, rot, colour) {
+    // A folded wing is a teardrop, not an oval: a rounded shoulder at the
+    // front and a point trailing behind. An ellipse here reads as an egg
+    // stuck to the bird's side, which is exactly what it looked like.
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(rot || 0);
+    const path = (g) => {
+      ctx.beginPath();
+      ctx.moveTo(rx + g, ry * 0.10);
+      ctx.quadraticCurveTo(rx * 0.75, -(ry + g), -rx * 0.10, -(ry * 0.80 + g));
+      ctx.quadraticCurveTo(-(rx * 0.75), -(ry * 0.55), -(rx + g * 1.3), ry * 0.30);
+      ctx.quadraticCurveTo(-rx * 0.30, ry * 0.80 + g, rx + g, ry * 0.10);
+      ctx.closePath();
+    };
+    const base = colour || GK.util.shade(sk.body, -24);
+    ctx.fillStyle = base; path(0); ctx.fill();
+    // sk.shade is the skin's own tint -- warm brown on the rooster, blue on
+    // the parrot -- glazed along the trailing edge. It is the one place a
+    // species' colouring shows without another opaque shape being added.
+    ctx.save(); path(0); ctx.clip();
+    ctx.fillStyle = sk.shade;
+    ctx.beginPath(); ctx.ellipse(-rx * 0.35, ry * 0.25, rx * 0.85, ry * 0.9, 0, 0, 7); ctx.fill();
+    ctx.restore();
+    // the coverts catching the light along the shoulder
+    ctx.fillStyle = GK.util.shade(base, 26);
+    ctx.beginPath();
+    ctx.moveTo(rx * 0.85, ry * 0.02);
+    ctx.quadraticCurveTo(rx * 0.55, -ry * 0.72, -rx * 0.05, -ry * 0.58);
+    ctx.quadraticCurveTo(rx * 0.25, -ry * 0.20, rx * 0.85, ry * 0.02);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  },
+
+  bEye(ctx, P, x, y, r, big, dead) {
+    if (dead) {
+      ctx.strokeStyle = "#222"; ctx.lineWidth = Math.max(1, r * 0.55);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r);
+      ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r);
+      ctx.stroke();
+      return;
+    }
+    if (big) {
+      ctx.fillStyle = "#fff";
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+      ctx.fillStyle = "#222";
+      ctx.beginPath(); ctx.arc(x + r * 0.10, y, r * 0.52, 0, 7); ctx.fill();
+    } else {
+      ctx.fillStyle = "#222";
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+    }
+    if (r > 1.6) {
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.beginPath(); ctx.arc(x - r * 0.30, y - r * 0.34, r * 0.26, 0, 7); ctx.fill();
+    }
+  },
+
+  /* --- bills ----------------------------------------------------------- */
+
+  // Pointed seed-eater's bill (chicken, chick, dove, peacock).
+  bBeakTri(ctx, P, x, y, len, h, fill) {
+    this.bPoly(ctx, P, [[x, y - h], [x + len, y], [x, y + h]], fill);
+  },
+  // Broad flat bill (duck, swan) -- rounded, wider than it is deep.
+  bBeakFlat(ctx, P, x, y, len, h, fill) {
+    ctx.fillStyle = P.line;
+    rr(ctx, x - P.lw, y - h - P.lw, len + P.lw * 2, h * 2 + P.lw * 2, h + P.lw); ctx.fill();
+    ctx.fillStyle = fill;
+    rr(ctx, x, y - h, len, h * 2, h); ctx.fill();
+  },
+  // Heavy hooked bill (parrot, owl) -- the curl is the whole tell.
+  bBeakHook(ctx, P, x, y, len, h, fill) {
+    const path = () => {
+      ctx.beginPath();
+      ctx.moveTo(x, y - h);
+      ctx.quadraticCurveTo(x + len, y - h * 0.9, x + len * 0.92, y + h * 0.5);
+      ctx.quadraticCurveTo(x + len * 0.75, y + h * 1.5, x + len * 0.45, y + h * 0.85);
+      ctx.lineTo(x, y + h * 0.6);
+      ctx.closePath();
+    };
+    ctx.strokeStyle = P.line; ctx.lineWidth = P.lw * 2; ctx.lineJoin = "round";
+    path(); ctx.stroke();
+    ctx.fillStyle = fill; path(); ctx.fill();
+  },
+
+  /* --- feet ------------------------------------------------------------ */
+
+  // Webbed (duck, swan, penguin) vs scaly toes (everything else). Drawn at the
+  // foot of a leg the plan has already placed.
+  bFoot(ctx, P, x, y, s, webbed, fill, flip) {
+    const d = flip ? -1 : 1;
+    if (webbed) {
+      this.bPoly(ctx, P, [[x - s * 0.04 * d, y - s * 0.03],
+                          [x + s * 0.20 * d, y - s * 0.02],
+                          [x + s * 0.17 * d, y + s * 0.045],
+                          [x - s * 0.05 * d, y + s * 0.04]], fill);
+    } else {
+      ctx.strokeStyle = fill; ctx.lineCap = "round";
+      ctx.lineWidth = Math.max(1.2, s * 0.05);
+      ctx.beginPath();
+      ctx.moveTo(x, y); ctx.lineTo(x + s * 0.13 * d, y);
+      ctx.moveTo(x, y); ctx.lineTo(x + s * 0.10 * d, y - s * 0.05);
+      ctx.moveTo(x, y); ctx.lineTo(x - s * 0.07 * d, y + s * 0.01);
+      ctx.stroke();
+    }
+  },
+
+  // A pair of legs from hip to the standing line at y = 0.46s, with feet.
+  // Far leg first and a shade darker: draw order is what gives a flat side-on
+  // character depth, and getting it wrong is why a bird can look one-legged.
+  bLegs(ctx, P, s, sk, opts) {
+    const o = opts || {};
+    const hipY = (o.hip === undefined ? 0.16 : o.hip) * s;
+    const footY = 0.46 * s;
+    const spread = (o.spread === undefined ? 0.13 : o.spread) * s;
+    const w = Math.max(1.4, s * (o.w === undefined ? 0.075 : o.w));
+    const far = GK.util.shade(sk.legs, -26);
+    for (const [dx, col] of [[-spread, far], [spread, sk.legs]]) {
+      this.bLimb(ctx, P, [[dx, hipY], [dx + (o.knee || 0) * s, (hipY + footY) / 2], [dx, footY]], w, col);
+      this.bFoot(ctx, P, dx, footY, s, !!o.webbed, col, dx < 0);
+    }
+  },
+});
+
 
 /* The flamingo's neck, in units of s, built once at load: circle centres and
    radii swept along an S-curve, tapering toward the head.
@@ -834,89 +1072,39 @@ const FLAMINGO_NECK = (() => {
   return out;
 })();
 
-/* Per-avatar sprite skins — the playable character matches the profile avatar. */
+/* Per-avatar skins. The playable bird matches the profile avatar.
+   `plan` names the body plan that paints it -- a different ANIMAL, not a
+   different colourway. Every field here is read by that plan and by nothing
+   else; tests/skins.test.js asserts each skin carries the ones its plan needs,
+   because a missing colour leaves fillStyle at whatever the last shape set and
+   fails silently. */
 const SKINS = {
-  "🐔": { body:"#fff",    shade:"rgba(0,0,0,0.06)",       beak:"#f0a500", legs:"#f0a500", comb:"#e8403a", wattle:"#e8403a" },
-  "🐓": { body:"#f6ede1", shade:"rgba(140,60,20,0.18)",   beak:"#f0a500", legs:"#e8952f", comb:"#d93025", wattle:"#d93025", bigComb:true, tail:"#2e7d4f" },
-  "🐤": { body:"#ffd93b", shade:"rgba(0,0,0,0.07)",       beak:"#f28c28", legs:"#f28c28" },
-  "🐥": { body:"#ffe066", shade:"rgba(0,0,0,0.05)",       beak:"#f28c28", legs:"#f28c28", tuft:"#f9a825" },
-  "🦆": { body:"#9c8f80", shade:"rgba(0,0,0,0.10)",       beak:"#fdd835", legs:"#f28c28", head:"#2e7d32", ring:"#fff", flatBill:true },
-  "🐧": { body:"#263238", shade:"rgba(0,0,0,0.2)",        beak:"#f28c28", legs:"#f28c28", belly:"#fff" },
-  "🦉": { body:"#8d6e63", shade:"rgba(0,0,0,0.12)",       beak:"#fdd835", legs:"#a1887f", disc:"#d7ccc8", bigEyes:true, tufts:"#6d4c41" },
-  "🦩": { body:"#f79ac0", shade:"rgba(198,40,110,0.16)",  beak:"#f7d3e2", legs:"#ef7da3", beakTip:"#2b2b33", head:"#fbb3d0", wing:"#f07fae", plan:"flamingo" },
-  "🦜": { body:"#e53935", shade:"rgba(25,50,160,0.28)",   beak:"#eceff1", legs:"#78909c", tuft:"#fdd835" },
-  "🦚": { body:"#00897b", shade:"rgba(13,71,161,0.28)",   beak:"#f0a500", legs:"#455a64", head:"#1565c0", tail:"#43a047", crown:"#1565c0" },
-  "🦢": { body:"#fff",    shade:"rgba(0,0,0,0.05)",       beak:"#f57f17", legs:"#455a64", flatBill:true, mask:"#212121" },
-  "🕊️": { body:"#eceff1", shade:"rgba(120,144,156,0.25)", beak:"#f9a825", legs:"#e57373" },
+  "🐔": { plan:"chicken",  body:"#ffffff", shade:"rgba(0,0,0,0.07)",      beak:"#f0a500", legs:"#f0a500",
+                           comb:"#e8403a", wattle:"#e8403a" },
+  "🐓": { plan:"rooster",  body:"#f6ede1", shade:"rgba(140,60,20,0.16)",  beak:"#f0a500", legs:"#e8952f",
+                           comb:"#d93025", wattle:"#d93025", tail:"#1f6b44" },
+  "🐤": { plan:"chick",    body:"#ffd93b", shade:"rgba(190,120,0,0.20)",  beak:"#f28c28", legs:"#f28c28" },
+  "🐥": { plan:"chick",    body:"#ffe066", shade:"rgba(190,130,0,0.18)",  beak:"#f28c28", legs:"#f28c28",
+                           tuft:"#f9a825", shell:"#fffdf5" },
+  "🦆": { plan:"duck",     body:"#8d7f6e", shade:"rgba(0,0,0,0.13)",      beak:"#fdd835", legs:"#f28c28",
+                           head:"#2e7d32", ring:"#ffffff" },
+  "🐧": { plan:"penguin",  body:"#2b3640", shade:"rgba(0,0,0,0.22)",      beak:"#f28c28", legs:"#f0a500",
+                           belly:"#ffffff" },
+  "🦉": { plan:"owl",      body:"#8d6e63", shade:"rgba(0,0,0,0.14)",      beak:"#fdd835", legs:"#a1887f",
+                           disc:"#e4d9d2", tufts:"#6d4c41" },
+  "🦩": { plan:"flamingo", body:"#f79ac0", shade:"rgba(198,40,110,0.16)", beak:"#f7d3e2", legs:"#ef7da3",
+                           beakTip:"#2b2b33", head:"#fbb3d0", wing:"#f07fae" },
+  "🦜": { plan:"parrot",   body:"#e53935", shade:"rgba(25,50,160,0.26)",  beak:"#cfd8dc", legs:"#78909c",
+                           tuft:"#fdd835", wing:"#1e88e5", tail:"#1565c0" },
+  "🦚": { plan:"peacock",  body:"#00897b", shade:"rgba(13,71,161,0.26)",  beak:"#f0a500", legs:"#455a64",
+                           head:"#1565c0", tail:"#2e9e5b", crown:"#1565c0" },
+  "🦢": { plan:"swan",     body:"#ffffff", shade:"rgba(0,0,0,0.06)",      beak:"#f57f17", legs:"#455a64",
+                           mask:"#212121" },
+  "🕊️": { plan:"dove",     body:"#eceff1", shade:"rgba(120,144,156,0.22)", beak:"#f9a825", legs:"#e57373" },
 };
 
 Object.assign(Art, {
-  // Dispatch on the skin's body plan. Rosalie's note -- "the flamingo just
-  // looks like a pink chicken" -- is why a variant that genuinely differs
-  // gets its own painter instead of another colour flag.
-  bird(ctx, s, sk, st) {
-    if (sk.plan === "flamingo") this.birdFlamingo(ctx, s, sk, st);
-    else this.birdStock(ctx, s, sk, st);
-  },
 
-  // The stock bird: one rounded body with optional combs, tufts, bills and
-  // masks bolted on. Every skin but the flamingo is a dressing of this.
-  birdStock(ctx, s, sk, st) {
-    // legs
-    ctx.strokeStyle=sk.legs; ctx.lineWidth=Math.max(2,s*0.09); ctx.lineCap="round";
-    const lb = s*0.46;
-    ctx.beginPath(); ctx.moveTo(-s*0.14,s*0.34); ctx.lineTo(-s*0.14,lb);
-    ctx.moveTo(s*0.14,s*0.34); ctx.lineTo(s*0.14,lb); ctx.stroke();
-    // tail plume behind the body (rooster, peacock)
-    if (sk.tail){ ctx.fillStyle=sk.tail; ctx.beginPath();
-      ctx.ellipse(-s*0.44,-s*0.1,s*0.17,s*0.3,-0.5,0,7); ctx.fill(); }
-    // body, belly, shading
-    ctx.fillStyle=sk.body; rr(ctx,-s*0.4,-s*0.28,s*0.8,s*0.66,s*0.28); ctx.fill();
-    if (sk.belly){ ctx.fillStyle=sk.belly; rr(ctx,-s*0.24,-s*0.12,s*0.48,s*0.46,s*0.2); ctx.fill(); }
-    ctx.fillStyle=sk.shade; rr(ctx,-s*0.4,0,s*0.8,s*0.38,s*0.24); ctx.fill();
-    // head, neck ring (duck), face disc + ear tufts (owl)
-    ctx.fillStyle=sk.head||sk.body; rr(ctx,-s*0.26,-s*0.5,s*0.52,s*0.4,s*0.2); ctx.fill();
-    if (sk.ring){ ctx.fillStyle=sk.ring; rr(ctx,-s*0.26,-s*0.16,s*0.52,s*0.07,s*0.03); ctx.fill(); }
-    if (sk.disc){ ctx.fillStyle=sk.disc; rr(ctx,-s*0.21,-s*0.47,s*0.42,s*0.3,s*0.14); ctx.fill(); }
-    if (sk.tufts){ ctx.fillStyle=sk.tufts; ctx.beginPath();
-      ctx.moveTo(-s*0.24,-s*0.44); ctx.lineTo(-s*0.16,-s*0.62); ctx.lineTo(-s*0.08,-s*0.48);
-      ctx.moveTo(s*0.08,-s*0.48); ctx.lineTo(s*0.16,-s*0.62); ctx.lineTo(s*0.24,-s*0.44);
-      ctx.fill(); }
-    // comb + wattle (chickens), head tuft (chick, parrot), crown (peacock)
-    if (sk.comb){ ctx.fillStyle=sk.comb; ctx.beginPath();
-      ctx.arc(-s*0.06,-s*0.52,s*0.09,0,7); ctx.arc(s*0.06,-s*0.55,s*0.09,0,7);
-      if (sk.bigComb) ctx.arc(-s*0.17,-s*0.49,s*0.08,0,7);
-      ctx.fill(); }
-    if (sk.wattle){ ctx.fillStyle=sk.wattle; rr(ctx,-s*0.03,-s*0.2,s*0.08,s*0.12,3); ctx.fill(); }
-    if (sk.tuft){ ctx.fillStyle=sk.tuft; ctx.beginPath();
-      ctx.arc(0,-s*0.56,s*0.07,0,7); ctx.arc(s*0.1,-s*0.53,s*0.055,0,7); ctx.fill(); }
-    if (sk.crown){ ctx.strokeStyle=sk.crown; ctx.lineWidth=Math.max(1.5,s*0.04); ctx.beginPath();
-      for (const dx of [-0.12,0,0.12]){ ctx.moveTo(dx*s,-s*0.5); ctx.lineTo(dx*s,-s*0.62); }
-      ctx.stroke();
-      ctx.fillStyle=sk.crown; ctx.beginPath();
-      for (const dx of [-0.12,0,0.12]){ ctx.moveTo(dx*s+s*0.045,-s*0.64); ctx.arc(dx*s,-s*0.64,s*0.045,0,7); }
-      ctx.fill(); }
-    // beak: flat bill (duck/swan) or pointy triangle, optional dark tip (flamingo)
-    if (sk.flatBill){ ctx.fillStyle=sk.beak; rr(ctx,s*0.16,-s*0.34,s*0.3,s*0.13,s*0.06); ctx.fill(); }
-    else { ctx.fillStyle=sk.beak; ctx.beginPath();
-      ctx.moveTo(s*0.2,-s*0.34); ctx.lineTo(s*0.42,-s*0.28); ctx.lineTo(s*0.2,-s*0.22); ctx.closePath(); ctx.fill();
-      if (sk.beakTip){ ctx.fillStyle=sk.beakTip; ctx.beginPath();
-        ctx.moveTo(s*0.33,-s*0.305); ctx.lineTo(s*0.42,-s*0.28); ctx.lineTo(s*0.33,-s*0.245); ctx.closePath(); ctx.fill(); } }
-    if (sk.mask){ ctx.fillStyle=sk.mask; ctx.beginPath(); ctx.arc(s*0.19,-s*0.28,s*0.06,0,7); ctx.fill(); }
-    // eyes
-    if (sk.bigEyes){
-      ctx.fillStyle="#fff"; ctx.beginPath();
-      ctx.arc(-s*0.02,-s*0.34,s*0.1,0,7); ctx.moveTo(s*0.26,-s*0.34); ctx.arc(s*0.16,-s*0.34,s*0.1,0,7); ctx.fill();
-      ctx.fillStyle="#222"; ctx.beginPath(); ctx.arc(-s*0.02,-s*0.34,s*0.05,0,7); ctx.fill();
-      ctx.beginPath(); ctx.arc(s*0.16,-s*0.34,s*0.05,0,7); ctx.fill();
-    } else {
-      ctx.fillStyle="#222"; ctx.beginPath(); ctx.arc(s*0.02,-s*0.36,s*0.05,0,7); ctx.fill();
-      ctx.beginPath(); ctx.arc(s*0.16,-s*0.36,s*0.05,0,7); ctx.fill();
-    }
-    if (st.dead){ ctx.strokeStyle="#222"; ctx.lineWidth=s*0.05; ctx.beginPath();
-      ctx.moveTo(-s*0.02,-s*0.4); ctx.lineTo(s*0.06,-s*0.32); ctx.moveTo(s*0.06,-s*0.4); ctx.lineTo(-s*0.02,-s*0.32);
-      ctx.moveTo(s*0.12,-s*0.4); ctx.lineTo(s*0.2,-s*0.32); ctx.moveTo(s*0.2,-s*0.4); ctx.lineTo(s*0.12,-s*0.32); ctx.stroke(); }
-  },
 
   // The flamingo is the one skin whose silhouette has to do the work. At tile
   // size a colour swap only ever says "pink bird"; what says "flamingo" is the
@@ -1104,5 +1292,307 @@ Object.assign(Art, {
       ctx.beginPath(); ctx.arc(lx, ly, T * 0.045, 0, 7); ctx.fill();
     }
     ctx.restore();
+  },
+});
+
+/* --- the body plans ---------------------------------------------------- */
+// Each one is a silhouette first. Read them as: what shape is this animal,
+// where does its weight sit, and what is the one feature you would draw if you
+// only got one? For the duck that is the flat bill and the low horizontal
+// body; for the penguin the upright teardrop and the flippers; for the owl the
+// face. None of them is the others with a different fill.
+
+Object.assign(Art, {
+  bird(ctx, s, sk, st) {
+    const fn = this["bird" + sk.plan[0].toUpperCase() + sk.plan.slice(1)];
+    fn.call(this, ctx, s, sk, st);
+  },
+
+  // 🐔 The baseline: plump, upright, weight forward, comb and wattle.
+  birdChicken(ctx, s, sk, st) {
+    const P = this.pen(sk, s);
+    this.bLegs(ctx, P, s, sk, { hip: 0.18 });
+    // tail: a short upswept wedge
+    this.bRibbon(ctx, P, -0.24 * s, -0.02 * s, -0.48 * s, -0.20 * s, -0.44 * s, -0.42 * s,
+                 0.28 * s, 0.05 * s, sk.body);
+    this.bEll(ctx, P, 0, -0.06 * s, 0.38 * s, 0.32 * s, sk.body, -0.06);
+    // a fuller breast, so the profile is a hen and not an egg
+    this.bEll(ctx, P, 0.17 * s, -0.14 * s, 0.22 * s, 0.22 * s, sk.body, 0, false);
+    this.bWing(ctx, P, sk, -0.06 * s, -0.02 * s, 0.22 * s, 0.15 * s, -0.15);
+    // head sits close in -- a chicken has almost no visible neck
+    this.bEll(ctx, P, 0.13 * s, -0.42 * s, 0.22 * s, 0.20 * s, sk.body);
+    if (sk.comb) {
+      ctx.fillStyle = sk.comb;
+      ctx.beginPath();
+      ctx.arc(0.06 * s, -0.60 * s, 0.075 * s, 0, 7);
+      ctx.arc(0.16 * s, -0.63 * s, 0.075 * s, 0, 7);
+      ctx.arc(0.25 * s, -0.59 * s, 0.06 * s, 0, 7);
+      ctx.fill();
+    }
+    if (sk.wattle) {
+      ctx.fillStyle = sk.wattle;
+      ctx.beginPath(); ctx.ellipse(0.20 * s, -0.26 * s, 0.05 * s, 0.08 * s, 0, 0, 7); ctx.fill();
+    }
+    this.bBeakTri(ctx, P, 0.31 * s, -0.40 * s, 0.20 * s, 0.065 * s, sk.beak);
+    this.bEye(ctx, P, 0.19 * s, -0.47 * s, 0.055 * s, false, st.dead);
+  },
+
+  // 🐓 Taller than the hen, chest out, and the sickle tail is the silhouette.
+  birdRooster(ctx, s, sk, st) {
+    const P = this.pen(sk, s);
+    this.bLegs(ctx, P, s, sk, { hip: 0.14, spread: 0.12 });
+    // sickle feathers: two long arcs sweeping up and back
+    this.bRibbon(ctx, P, -0.18 * s, -0.04 * s, -0.60 * s, -0.30 * s, -0.44 * s, -0.70 * s,
+                 0.24 * s, 0.03 * s, sk.tail);
+    this.bRibbon(ctx, P, -0.18 * s, -0.08 * s, -0.52 * s, -0.38 * s, -0.28 * s, -0.70 * s,
+                 0.19 * s, 0.03 * s, GK.util.shade(sk.tail, 26));
+    this.bRibbon(ctx, P, -0.18 * s, -0.12 * s, -0.40 * s, -0.40 * s, -0.12 * s, -0.62 * s,
+                 0.14 * s, 0.03 * s, GK.util.shade(sk.tail, 48));
+    this.bEll(ctx, P, 0.02 * s, -0.10 * s, 0.35 * s, 0.30 * s, sk.body, -0.14);
+    this.bWing(ctx, P, sk, -0.04 * s, -0.06 * s, 0.21 * s, 0.15 * s, -0.2);
+    // a real neck, held up
+    this.bLimb(ctx, P, [[0.10 * s, -0.24 * s], [0.17 * s, -0.46 * s]], 0.18 * s, sk.body);
+    this.bEll(ctx, P, 0.19 * s, -0.58 * s, 0.19 * s, 0.17 * s, sk.body);
+    ctx.fillStyle = sk.comb;
+    ctx.beginPath();
+    for (const [dx, dy, r] of [[0.04, -0.74, 0.07], [0.14, -0.79, 0.085], [0.25, -0.75, 0.07], [0.31, -0.68, 0.05]])
+      ctx.arc(dx * s, dy * s, r * s, 0, 7);
+    ctx.fill();
+    ctx.fillStyle = sk.wattle;
+    ctx.beginPath();
+    ctx.ellipse(0.22 * s, -0.42 * s, 0.055 * s, 0.10 * s, 0, 0, 7);
+    ctx.ellipse(0.31 * s, -0.44 * s, 0.04 * s, 0.075 * s, 0, 0, 7);
+    ctx.fill();
+    this.bBeakTri(ctx, P, 0.34 * s, -0.57 * s, 0.20 * s, 0.065 * s, sk.beak);
+    this.bEye(ctx, P, 0.24 * s, -0.63 * s, 0.052 * s, false, st.dead);
+  },
+
+  // 🐤 Almost all head. No neck, stubby everything, and the eyes do the work.
+  birdChick(ctx, s, sk, st) {
+    const P = this.pen(sk, s);
+    this.bLegs(ctx, P, s, sk, { hip: 0.22, spread: 0.10, w: 0.055 });
+    this.bEll(ctx, P, 0, 0.04 * s, 0.30 * s, 0.26 * s, sk.body);
+    // the head is bigger than the body, which is the entire joke
+    this.bEll(ctx, P, 0.04 * s, -0.30 * s, 0.34 * s, 0.31 * s, sk.body);
+    this.bWing(ctx, P, sk, -0.19 * s, 0.04 * s, 0.11 * s, 0.15 * s, 0.25);
+    if (sk.tuft) {
+      this.bRibbon(ctx, P, 0.00 * s, -0.56 * s, -0.02 * s, -0.72 * s, 0.10 * s, -0.76 * s,
+                   0.10 * s, 0.02 * s, sk.tuft);
+    }
+    if (sk.shell) {
+      // half an eggshell, still on its head
+      ctx.fillStyle = P.line;
+      ctx.beginPath(); ctx.ellipse(0.04 * s, -0.52 * s, 0.30 * s + P.lw, 0.20 * s + P.lw, 0, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = sk.shell;
+      ctx.beginPath(); ctx.ellipse(0.04 * s, -0.52 * s, 0.30 * s, 0.20 * s, 0, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = P.line;
+      ctx.beginPath();
+      ctx.moveTo(-0.26 * s, -0.52 * s);
+      for (let i = 0; i < 5; i++) {
+        const x = (-0.26 + i * 0.13) * s;
+        ctx.lineTo(x + 0.065 * s, -0.52 * s + (i % 2 ? -0.05 : 0.05) * s);
+      }
+      ctx.lineTo(0.34 * s, -0.56 * s); ctx.lineTo(0.34 * s, -0.60 * s);
+      ctx.lineTo(-0.26 * s, -0.60 * s); ctx.closePath(); ctx.fill();
+    }
+    this.bBeakTri(ctx, P, 0.30 * s, -0.26 * s, 0.17 * s, 0.07 * s, sk.beak);
+    this.bEye(ctx, P, 0.17 * s, -0.36 * s, 0.085 * s, true, st.dead);
+    this.bEye(ctx, P, -0.06 * s, -0.36 * s, 0.070 * s, true, st.dead);
+  },
+
+  // 🦆 Low and horizontal, riding the water even on land. Flat bill, webbed
+  // feet, and the mallard's white ring between the green head and the body.
+  birdDuck(ctx, s, sk, st) {
+    const P = this.pen(sk, s);
+    this.bLegs(ctx, P, s, sk, { hip: 0.20, spread: 0.11, w: 0.06, webbed: true });
+    // upturned tail feather
+    this.bRibbon(ctx, P, -0.34 * s, -0.06 * s, -0.56 * s, -0.16 * s, -0.52 * s, -0.30 * s,
+                 0.18 * s, 0.03 * s, sk.body);
+    // a long body, wider than it is tall -- the opposite of the chicken
+    this.bEll(ctx, P, -0.02 * s, 0.02 * s, 0.42 * s, 0.26 * s, sk.body, -0.05);
+    this.bWing(ctx, P, sk, -0.08 * s, 0.05 * s, 0.26 * s, 0.15 * s, -0.05);
+    this.bLimb(ctx, P, [[0.16 * s, -0.12 * s], [0.22 * s, -0.34 * s]], 0.20 * s, sk.head || sk.body);
+    if (sk.ring) {
+      ctx.strokeStyle = sk.ring; ctx.lineWidth = Math.max(1.4, s * 0.055);
+      ctx.beginPath(); ctx.moveTo(0.11 * s, -0.20 * s); ctx.lineTo(0.27 * s, -0.22 * s); ctx.stroke();
+    }
+    this.bEll(ctx, P, 0.24 * s, -0.46 * s, 0.21 * s, 0.19 * s, sk.head || sk.body);
+    this.bBeakFlat(ctx, P, 0.36 * s, -0.42 * s, 0.30 * s, 0.065 * s, sk.beak);
+    this.bEye(ctx, P, 0.29 * s, -0.52 * s, 0.052 * s, false, st.dead);
+  },
+
+  // 🐧 An upright teardrop. No neck, flippers down the sides, big splayed feet
+  // out front -- and the white front panel, which is most of the silhouette.
+  birdPenguin(ctx, s, sk, st) {
+    const P = this.pen(sk, s);
+    // feet are in front, not under: a penguin stands on its heels
+    for (const dx of [-0.17, 0.17]) {
+      this.bPoly(ctx, P, [[dx * s - 0.05 * s, 0.40 * s], [dx * s + 0.16 * s, 0.40 * s],
+                          [dx * s + 0.14 * s, 0.48 * s], [dx * s - 0.06 * s, 0.47 * s]], sk.legs);
+    }
+    this.bEll(ctx, P, 0, -0.08 * s, 0.36 * s, 0.46 * s, sk.body);
+    // belly panel
+    if (sk.belly) {
+      ctx.fillStyle = sk.belly;
+      ctx.beginPath(); ctx.ellipse(0.03 * s, -0.02 * s, 0.24 * s, 0.36 * s, 0, 0, 7); ctx.fill();
+    }
+    // flippers, one each side, the far one darker
+    this.bEll(ctx, P, -0.34 * s, -0.02 * s, 0.09 * s, 0.26 * s, GK.util.shade(sk.body, -18), 0.18, false);
+    this.bEll(ctx, P, 0.34 * s, -0.04 * s, 0.09 * s, 0.24 * s, sk.body, -0.18, false);
+    // the head is part of the teardrop; only the face marking separates it
+    ctx.fillStyle = sk.body;
+    ctx.beginPath(); ctx.ellipse(0, -0.44 * s, 0.29 * s, 0.24 * s, 0, 0, 7); ctx.fill();
+    if (sk.belly) {
+      ctx.fillStyle = sk.belly;
+      ctx.beginPath(); ctx.ellipse(0.10 * s, -0.40 * s, 0.17 * s, 0.15 * s, -0.2, 0, 7); ctx.fill();
+    }
+    this.bBeakTri(ctx, P, 0.24 * s, -0.44 * s, 0.20 * s, 0.062 * s, sk.beak);
+    this.bEye(ctx, P, 0.13 * s, -0.52 * s, 0.050 * s, false, st.dead);
+    this.bEye(ctx, P, -0.08 * s, -0.52 * s, 0.044 * s, false, st.dead);
+  },
+
+  // 🦉 The face IS the bird: a wide flat disc, ear tufts at the corners, and
+  // eyes far too big for it. Body barely visible behind.
+  birdOwl(ctx, s, sk, st) {
+    const P = this.pen(sk, s);
+    this.bLegs(ctx, P, s, sk, { hip: 0.30, spread: 0.13, w: 0.10 });
+    this.bEll(ctx, P, 0, -0.02 * s, 0.34 * s, 0.34 * s, sk.body);
+    // folded wings, barred
+    this.bEll(ctx, P, -0.24 * s, -0.02 * s, 0.13 * s, 0.24 * s, GK.util.shade(sk.body, -14), 0.1, false);
+    this.bEll(ctx, P, 0.24 * s, -0.02 * s, 0.13 * s, 0.24 * s, GK.util.shade(sk.body, -6), -0.1, false);
+    // ear tufts, before the head so they sit behind it
+    for (const d of [-1, 1]) {
+      this.bRibbon(ctx, P, d * 0.20 * s, -0.50 * s, d * 0.30 * s, -0.74 * s, d * 0.24 * s, -0.86 * s,
+                   0.16 * s, 0.02 * s, sk.tufts || sk.body);
+    }
+    this.bEll(ctx, P, 0, -0.48 * s, 0.36 * s, 0.30 * s, sk.body);
+    if (sk.disc) {
+      ctx.fillStyle = sk.disc;
+      ctx.beginPath(); ctx.ellipse(-0.13 * s, -0.48 * s, 0.16 * s, 0.20 * s, 0, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(0.13 * s, -0.48 * s, 0.16 * s, 0.20 * s, 0, 0, 7); ctx.fill();
+    }
+    this.bEye(ctx, P, -0.13 * s, -0.50 * s, 0.115 * s, true, st.dead);
+    this.bEye(ctx, P, 0.13 * s, -0.50 * s, 0.115 * s, true, st.dead);
+    this.bBeakHook(ctx, P, -0.04 * s, -0.34 * s, 0.13 * s, 0.055 * s, sk.beak);
+  },
+
+  // 🦜 Hooked bill, a crest, and a long tail hanging down behind -- the three
+  // things that separate a parrot from every other bird in the set.
+  birdParrot(ctx, s, sk, st) {
+    const P = this.pen(sk, s);
+    this.bLegs(ctx, P, s, sk, { hip: 0.26, spread: 0.11, w: 0.085 });
+    // tail: long, straight, tapering, hanging past the feet
+    this.bRibbon(ctx, P, -0.18 * s, 0.02 * s, -0.36 * s, 0.22 * s, -0.44 * s, 0.50 * s,
+                 0.24 * s, 0.07 * s, sk.tail || sk.body);
+    this.bEll(ctx, P, 0, -0.08 * s, 0.32 * s, 0.30 * s, sk.body, -0.08);
+    // the contrasting wing, which is what parrots are for -- but the same
+    // teardrop everything else wears, or it reads as a ball stuck on the side
+    this.bWing(ctx, P, sk, -0.04 * s, -0.03 * s, 0.21 * s, 0.19 * s, -0.28, sk.wing);
+    this.bEll(ctx, P, 0.12 * s, -0.44 * s, 0.22 * s, 0.21 * s, sk.body);
+    if (sk.tuft) {
+      for (const [k, w] of [[0, 0.13], [0.10, 0.10], [-0.10, 0.10]]) {
+        this.bRibbon(ctx, P, (0.10 + k) * s, -0.60 * s, (0.06 + k * 1.6) * s, -0.80 * s,
+                     (0.16 + k * 2) * s, -0.88 * s, w * s, 0.02 * s, sk.tuft);
+      }
+    }
+    this.bBeakHook(ctx, P, 0.28 * s, -0.44 * s, 0.20 * s, 0.085 * s, sk.beak);
+    this.bEye(ctx, P, 0.16 * s, -0.50 * s, 0.058 * s, true, st.dead);
+  },
+
+  // 🦚 The fan. Kept to +-0.72s so it never hides the lane either side, and
+  // drawn first so the bird stands in front of its own tail.
+  birdPeacock(ctx, s, sk, st) {
+    const P = this.pen(sk, s);
+    const fan = sk.tail;
+    for (let i = -3; i <= 3; i++) {
+      const a = i * 0.30;
+      const tipX = Math.sin(a) * 0.72 * s, tipY = -0.34 * s - Math.cos(a) * 0.50 * s;
+      this.bRibbon(ctx, P, 0, 0.02 * s, tipX * 0.55, tipY * 0.70, tipX, tipY,
+                   0.08 * s, 0.24 * s, i % 2 ? fan : GK.util.shade(fan, 16));
+      // the ocellus: a soft halo, the eye, and a highlight -- three rings is
+      // what makes it read as an eye rather than as a dot at tile size
+      const ex = tipX * 0.90, ey = tipY * 0.90;
+      ctx.fillStyle = GK.util.shade(fan, 40);
+      ctx.beginPath(); ctx.ellipse(ex, ey, 0.085 * s, 0.075 * s, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = sk.crown;
+      ctx.beginPath(); ctx.ellipse(ex, ey, 0.058 * s, 0.050 * s, 0, 0, 7); ctx.fill();
+      // the pupil is under a pixel below about s=25, so stop drawing seven of
+      // them on a phone rather than paying for shapes nobody can see
+      if (s > 25) {
+        ctx.fillStyle = sk.beak;
+        ctx.beginPath(); ctx.ellipse(ex, ey, 0.026 * s, 0.022 * s, 0, 0, 7); ctx.fill();
+      }
+    }
+    this.bLegs(ctx, P, s, sk, { hip: 0.16, spread: 0.12 });
+    this.bEll(ctx, P, 0, -0.04 * s, 0.30 * s, 0.27 * s, sk.body, -0.08);
+    this.bLimb(ctx, P, [[0.08 * s, -0.20 * s], [0.16 * s, -0.44 * s], [0.17 * s, -0.56 * s]],
+               0.15 * s, sk.head || sk.body);
+    this.bEll(ctx, P, 0.18 * s, -0.66 * s, 0.16 * s, 0.15 * s, sk.head || sk.body);
+    // crown: three tipped filaments
+    ctx.strokeStyle = sk.crown; ctx.lineWidth = Math.max(1, s * 0.028); ctx.lineCap = "round";
+    ctx.beginPath();
+    for (const dx of [0.08, 0.17, 0.26]) { ctx.moveTo(dx * s, -0.78 * s); ctx.lineTo(dx * s, -0.90 * s); }
+    ctx.stroke();
+    ctx.fillStyle = sk.crown;
+    for (const dx of [0.08, 0.17, 0.26]) {
+      ctx.beginPath(); ctx.arc(dx * s, -0.93 * s, 0.035 * s, 0, 7); ctx.fill();
+    }
+    this.bBeakTri(ctx, P, 0.31 * s, -0.65 * s, 0.16 * s, 0.05 * s, sk.beak);
+    this.bEye(ctx, P, 0.22 * s, -0.70 * s, 0.048 * s, false, st.dead);
+  },
+
+  // 🦢 A big body sitting low with a long thick S-neck over it. The neck is
+  // the same swept-circle trick as the flamingo, at a different scale -- a
+  // ribbon folds over itself on a bend this tight and leaves a notch.
+  birdSwan(ctx, s, sk, st) {
+    const P = this.pen(sk, s);
+    this.bLegs(ctx, P, s, sk, { hip: 0.20, spread: 0.12, w: 0.06, webbed: true });
+    this.bRibbon(ctx, P, -0.30 * s, -0.06 * s, -0.58 * s, -0.14 * s, -0.60 * s, -0.30 * s,
+                 0.22 * s, 0.04 * s, sk.body);
+    this.bEll(ctx, P, -0.04 * s, -0.02 * s, 0.40 * s, 0.28 * s, sk.body, -0.06);
+    this.bWing(ctx, P, sk, -0.10 * s, 0.02 * s, 0.24 * s, 0.16 * s, -0.06);
+    // neck
+    const P0 = [[0.10, -0.22], [0.36, -0.50], [0.06, -0.66], [0.20, -0.80]];
+    ctx.fillStyle = P.line;
+    const sweep = (rad) => {
+      ctx.beginPath();
+      for (let i = 0; i <= 20; i++) {
+        const u = i / 20, v = 1 - u;
+        const x = v * v * v * P0[0][0] + 3 * v * v * u * P0[1][0] + 3 * v * u * u * P0[2][0] + u * u * u * P0[3][0];
+        const y = v * v * v * P0[0][1] + 3 * v * v * u * P0[1][1] + 3 * v * u * u * P0[2][1] + u * u * u * P0[3][1];
+        const r = (0.15 - 0.05 * u) / 2 * s + rad;
+        ctx.moveTo(x * s + r, y * s); ctx.arc(x * s, y * s, r, 0, 7);
+      }
+      ctx.fill();
+    };
+    sweep(P.lw); ctx.fillStyle = sk.body; sweep(0);
+    this.bEll(ctx, P, 0.19 * s, -0.82 * s, 0.115 * s, 0.105 * s, sk.body);
+    this.bBeakFlat(ctx, P, 0.26 * s, -0.82 * s, 0.30 * s, 0.052 * s, sk.beak);
+    // the black knob over the bill and the mask running back to the eye --
+    // a mute swan's one marking, and the thing that says swan and not goose
+    if (sk.mask) {
+      ctx.fillStyle = sk.mask;
+      ctx.beginPath();
+      ctx.moveTo(0.30 * s, -0.90 * s);
+      ctx.quadraticCurveTo(0.24 * s, -0.94 * s, 0.20 * s, -0.87 * s);
+      ctx.quadraticCurveTo(0.24 * s, -0.80 * s, 0.29 * s, -0.81 * s);
+      ctx.closePath(); ctx.fill();
+    }
+    this.bEye(ctx, P, 0.21 * s, -0.86 * s, 0.036 * s, false, st.dead);
+  },
+
+  // 🕊️ Sleek and small-headed, with a long wedge tail. The quietest of the
+  // twelve on purpose -- it is the one that has to read as gentle.
+  birdDove(ctx, s, sk, st) {
+    const P = this.pen(sk, s);
+    this.bLegs(ctx, P, s, sk, { hip: 0.18, spread: 0.10, w: 0.055 });
+    this.bRibbon(ctx, P, -0.24 * s, -0.04 * s, -0.50 * s, -0.14 * s, -0.62 * s, -0.26 * s,
+                 0.26 * s, 0.10 * s, sk.body);
+    this.bEll(ctx, P, 0, -0.08 * s, 0.36 * s, 0.29 * s, sk.body, -0.12);
+    this.bWing(ctx, P, sk, -0.04 * s, -0.05 * s, 0.22 * s, 0.18 * s, -0.18);
+    this.bLimb(ctx, P, [[0.14 * s, -0.26 * s], [0.20 * s, -0.42 * s]], 0.17 * s, sk.body);
+    this.bEll(ctx, P, 0.22 * s, -0.54 * s, 0.175 * s, 0.165 * s, sk.body);
+    this.bBeakTri(ctx, P, 0.35 * s, -0.52 * s, 0.15 * s, 0.048 * s, sk.beak);
+    this.bEye(ctx, P, 0.27 * s, -0.58 * s, 0.046 * s, false, st.dead);
   },
 });
