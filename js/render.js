@@ -9,6 +9,13 @@
 
 Object.assign(Game, {
 
+  // The bird the player chose in Settings, or the one matching their profile
+  // avatar if they never chose. Read from the progress the level loaded, so
+  // the renderer never touches storage per frame.
+  bird() {
+    return (this.progress && this.progress.bird) || (this.profile && this.profile.avatar) || "🐔";
+  },
+
   // Players who ask their OS for less movement get a world that holds still:
   // no shake, no drift, no sway, a steady warning lamp. One number, so it can
   // be checked from the console and there is nowhere for a stray animation to
@@ -200,7 +207,7 @@ Object.assign(Game, {
 
   drawChick() {
     const ctx=this.ctx, T=this.TILE, c=this.chick;
-    const sk = SKINS[this.profile && this.profile.avatar] || SKINS["🐔"];
+    const sk = SKINS[this.bird()] || SKINS["🐔"];
     let [x,yBase]=this.screen(c.col,c.row);
     // riding a log: bob with the lane so bird and log move as one
     const under=this.world[c.row];

@@ -4,6 +4,8 @@
 // Profiles, PINs, delete flow and the leaderboard renderer all come from
 // gamekit (GK.Profiles); App keeps only what is Chicken-Cross-specific.
 const AVATARS = ["🐔","🐤","🦆","🐧","🦉","🦩","🐓","🦜","🐥","🦚","🦢","🕊️"];
+const BIRD_NAMES = { "🐔":"Chicken", "🐤":"Chick", "🦆":"Duck", "🐧":"Penguin", "🦉":"Owl", "🦩":"Flamingo",
+  "🐓":"Rooster", "🦜":"Parrot", "🐥":"Hatchling", "🦚":"Peacock", "🦢":"Swan", "🕊️":"Dove" };
 
 const App = {
   profile:null, screen:"splash",
@@ -23,7 +25,7 @@ const App = {
       storage: Storage,
       avatars: AVATARS,
       meta: (p, g) => `🏁 best ${g.best} · 🪙 ${g.coins} · 🗺️ ${levelsDone(g)}/${LEVELS.length}`,
-      onEnter: (p) => { this.profile = p; this.showMap(); },
+      onEnter: (p) => { this.profile = p; this.applyLook(Storage.getProgress(p.id).look); this.showMap(); },
       addLabel: "New Player",
     });
     GK.initPWA({ appName: "Chicken Cross" });
@@ -37,6 +39,9 @@ const App = {
       .jump("level", LEVELS.length, n => this.startLevel(n - 1))
       .action("endless", () => this.startEndless());
     Game.boot();
+    // Before a player is picked, show the look their last session used.
+    const lastP = GK.Profiles.lastProfile();
+    this.applyLook(lastP ? Storage.getProgress(lastP.id).look : this.deviceLook());
     this.el("lb-back").onclick = () => this.showScreen(this.profile?"map":"splash");
     this.refreshSplash();
     // Firestore sync runs in the background; the game is playable immediately.
@@ -44,6 +49,9 @@ const App = {
       this.el("sync-badge").textContent = ok ? "☁️ synced" : "📴 offline";
       // refresh whatever the player is looking at with the merged data
       if (ok && this.screen === "profiles") GK.Profiles.renderList();
+      // a synced player may have picked a different look on another device
+      const p = this.profile || GK.Profiles.lastProfile();
+      if (ok && p) this.applyLook(Storage.getProgress(p.id).look);
       if (ok && this.screen === "splash") this.refreshSplash();
     });
   },
@@ -62,8 +70,7 @@ const App = {
     if (c.width !== w * dpr) { c.width = w * dpr; c.height = h * dpr; }
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, w, h);
-    const last = GK.Profiles.lastProfile();
-    const sk = SKINS[(this.profile && this.profile.avatar) || (last && last.avatar)] || SKINS["🐔"];
+    const sk = SKINS[this.birdOf(this.profile || GK.Profiles.lastProfile())] || SKINS["🐔"];
     g.save(); g.translate(w / 2, h * 0.84);
     g.globalAlpha = 0.30;
     Art.blob(g, 0, 8, 62, 17, "rgba(20,40,60,1)");
@@ -134,6 +141,79 @@ const App = {
     const params={ weights:{ grass:0.32, road:0.40, water:0.16, rail:0.12 },
       theme:WORLDS[4].theme, wi:4, carMin:2.0, carMax:4.2, truckChance:0.3, creep:0.6, coinRate:0.4, railFast:15 };
     Game.begin({ mode:"endless", params, target:0 });
+  },
+
+  /* ----- settings: look + character, saved per player ----- */
+  // Both live in the player's progress, so they follow her to other devices.
+  birdOf(p) {
+    if (!p) return "🐔";
+    return Storage.getProgress(p.id).bird || p.avatar || "🐔";
+  },
+  deviceLook() {
+    try { return localStorage.getItem("cc_look") || "new"; } catch (e) { return "new"; }
+  },
+  applyLook(look) {
+    look = look === "classic" ? "classic" : "new";
+    Game.setLook(look);
+    this.el("css-new").disabled = look === "classic";
+    this.el("css-classic").disabled = look !== "classic";
+    try { localStorage.setItem("cc_look", look); } catch (e) {}
+    this.drawHero();
+  },
+  openSettings() {
+    if (!this.profile) return;
+    Sfx.click();
+    this.renderSettings();
+    this.openModal("settings-modal");
+  },
+  closeSettings() { Sfx.click(); this.closeModal("settings-modal"); },
+  saveSetting(key, val) {
+    const g = Storage.getProgress(this.profile.id);
+    g[key] = val;
+    Storage.saveProgress(this.profile.id, g);
+    if (key === "look") this.applyLook(val);
+    Sfx.click();
+    this.renderSettings();
+  },
+  renderSettings() {
+    const g = Storage.getProgress(this.profile.id);
+    const look = g.look === "classic" ? "classic" : "new";
+    const bird = this.birdOf(this.profile);
+    document.querySelectorAll("#settings-modal [data-look]").forEach(b => {
+      b.setAttribute("aria-pressed", String(b.dataset.look === look));
+      b.onclick = () => { if (b.dataset.look !== look) this.saveSetting("look", b.dataset.look); };
+    });
+    const grid = this.el("bird-grid"); grid.innerHTML = "";
+    AVATARS.forEach(e => {
+      const b = document.createElement("button");
+      b.className = "bird-choice"; b.setAttribute("role", "radio");
+      b.setAttribute("aria-checked", String(e === bird));
+      b.setAttribute("aria-label", BIRD_NAMES[e]);
+      const c = document.createElement("canvas");
+      b.appendChild(c);
+      const n = document.createElement("span"); n.textContent = BIRD_NAMES[e]; b.appendChild(n);
+      b.onclick = () => { if (e !== bird) this.saveSetting("bird", e); };
+      grid.appendChild(b);
+      this.paintPreview(c, e, look);
+    });
+  },
+  // One bird on a small canvas, drawn by the painter of the chosen look, so the
+  // grid shows exactly what she will play as.
+  paintPreview(c, emoji, look) {
+    const size = 64, dpr = Math.min(window.devicePixelRatio || 1, 2);
+    c.width = size * dpr; c.height = size * dpr;
+    const g = c.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (look === "classic") {
+      const sk = LEGACY_SKINS[emoji] || LEGACY_SKINS["🐔"], s = size * 0.66;
+      g.translate(size / 2, size * 0.6);
+      const me = { ctx: g, TILE: s * 2, dead: false, elapsed: 0, _movedAt: 0 };
+      if (sk.plan === "flamingo") LEGACY_DRAW.paintFlamingo.call(me, s, sk);
+      else LEGACY_DRAW.paintBird.call(me, s, sk);
+    } else {
+      g.translate(size / 2, size * 0.9);
+      Art.bird(g, size * 0.6, SKINS[emoji] || SKINS["🐔"], { dead: false, idle: 0 });
+    }
   },
 
   /* ----- result modal ----- */

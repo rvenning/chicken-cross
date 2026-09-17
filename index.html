@@ -1,5 +1,5 @@
 <meta charset="utf-8" />
-<meta name="gk-version" content="28" data-date="2026-09-14" data-kit="1.10.1">
+<meta name="gk-version" content="29" data-date="2026-09-17" data-kit="1.10.1">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
@@ -11,7 +11,16 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
 <title>Chicken Cross</title>
 <link rel="stylesheet" href="lib/gk-base.css" />
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css" id="css-new">
+<link rel="stylesheet" href="css/legacy.css" id="css-classic" disabled>
+<link rel="stylesheet" href="css/settings.css">
+<script>
+  // Pick the stylesheet before first paint, from the look this device last used.
+  try { if (localStorage.getItem("cc_look") === "classic") {
+    document.getElementById("css-new").disabled = true;
+    document.getElementById("css-classic").disabled = false;
+  } } catch (e) {}
+</script>
 
 <canvas id="c"></canvas>
 
@@ -55,6 +64,7 @@
     <div class="grow"></div>
     <button class="iconbtn" onclick="App.showLeaderboard()" aria-label="High scores">🏆</button>
     <button class="iconbtn btn-sound" aria-label="Toggle sound">🔊</button>
+    <button class="iconbtn" onclick="App.openSettings()" aria-label="Settings">⚙️</button>
   </div>
   <div class="content">
     <button class="btn blue wide" id="btn-endless" onclick="App.startEndless()">♾️ Endless Run</button>
@@ -99,6 +109,20 @@
   </div>
 </div>
 
+<div class="modal" id="settings-modal">
+  <div class="sheet settings-sheet">
+    <h2>⚙️ Settings</h2>
+    <h3 id="look-label">Look</h3>
+    <div class="seg" role="group" aria-labelledby="look-label">
+      <button data-look="new" aria-pressed="false">✨ New<small>detailed worlds</small></button>
+      <button data-look="classic" aria-pressed="false">🕹️ Classic<small>the original look</small></button>
+    </div>
+    <h3 id="bird-label">Character</h3>
+    <div class="bird-grid" id="bird-grid" role="radiogroup" aria-labelledby="bird-label"></div>
+    <button class="btn green wide" onclick="App.closeSettings()">Done</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="lib/gk-util.js"></script>
@@ -117,4 +141,5 @@
 <script src="js/game.js"></script>
 <script src="js/art.js"></script>
 <script src="js/render.js"></script>
+<script src="js/render-legacy.js"></script>
 <script src="js/main.js"></script>

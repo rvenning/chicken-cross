@@ -84,6 +84,9 @@ function loadGame() {
     .concat([
       ";globalThis.SKINS = SKINS;",
       "globalThis.Art = Art;",
+      "globalThis.LEGACY_SKINS = LEGACY_SKINS;",
+      "globalThis.LEGACY_DRAW = LEGACY_DRAW;",
+      "globalThis.mergeProgress = mergeProgress;",
     ])
     .join("\n");
   vm.runInContext(source, sandbox, { filename: "chicken-cross.js" });
