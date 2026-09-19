@@ -17,6 +17,7 @@ dodge the cars, ride the logs, and don't argue with the trains.
 - ☁️ Firebase Firestore sync (falls back to localStorage offline)
 - 📱 iPad-first controls: tap to hop, swipe to steer (fires mid-gesture, Crossy-Road style); works with keyboard/WASD on desktop
 - 📲 Installable PWA: "Add to Home Screen" button, offline play via service worker
+- 🧊 Optional 3D view (⚙️ Settings → View): a blocky, Crossy-Road-style world drawn with three.js — same rules, same levels, per-world trees, night lighting and lava
 - 🌊 Watery water, as requested by Nathan
 
 ## Built on gamekit
@@ -32,6 +33,13 @@ node tools/sync-to-game.js "D:\OneDrive\Documents\Claude Code\chicken-cross"
 
 Everything game-specific — the canvas engine, worlds/levels, bird sprites, jingles —
 lives in `index.html`.
+
+## The 3D view
+`js/render3d.js` is a second renderer over the same simulation; it only reads `Game`
+state. three.js lives in `vendor/three/three.min.js` (a trimmed bundle, ~136 KB gzipped,
+MIT licence alongside it) and is only fetched when a player turns 3D on. To add a
+three.js class the renderer needs, list it in `tools/three-entry.js` and rebuild with the
+command in that file's header. `vendor/` is outside `lib/` so a gamekit sync never touches it.
 
 ## PWA files
 - `manifest.json` — app identity: name, icons, standalone display, theme colours

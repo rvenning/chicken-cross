@@ -10,14 +10,14 @@ const mergeProgress = (a, b) => {
   for (const [gi, lv] of Object.entries(b.levels || {})) {
     if (!levels[gi] || (lv.stars || 0) > (levels[gi].stars || 0)) levels[gi] = lv;
   }
-  // Settings (chosen bird, classic look) follow the newer copy.
+  // Settings (chosen bird, classic look, 2D/3D view) follow the newer copy.
   const newer = (b.updated || 0) > (a.updated || 0) ? b : a, older = newer === a ? b : a;
   const out = {
     coins: Math.max(a.coins || 0, b.coins || 0),
     best: Math.max(a.best || 0, b.best || 0),
     levels,
   };
-  for (const k of ["bird", "look"]) {
+  for (const k of ["bird", "look", "view"]) {
     const v = newer[k] !== undefined ? newer[k] : older[k];
     if (v !== undefined) out[k] = v;
   }

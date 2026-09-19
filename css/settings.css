@@ -3,6 +3,7 @@
 .settings-sheet { max-width: 420px; max-height: calc(100vh - 32px); overflow-y: auto; }
 .settings-sheet h3 { margin: 16px 0 8px; font-size: 15px; text-transform: uppercase;
                      letter-spacing: .06em; opacity: .7; }
+.settings-sheet h3 .note { text-transform: none; letter-spacing: 0; font-weight: 600; }
 .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .seg button { font: inherit; font-weight: 800; font-size: 16px; padding: 12px 8px;
               border-radius: 14px; border: 3px solid transparent; cursor: pointer;

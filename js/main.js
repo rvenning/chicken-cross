@@ -25,7 +25,7 @@ const App = {
       storage: Storage,
       avatars: AVATARS,
       meta: (p, g) => `🏁 best ${g.best} · 🪙 ${g.coins} · 🗺️ ${levelsDone(g)}/${LEVELS.length}`,
-      onEnter: (p) => { this.profile = p; this.applyLook(Storage.getProgress(p.id).look); this.showMap(); },
+      onEnter: (p) => { this.profile = p; this.applyPrefs(Storage.getProgress(p.id)); this.showMap(); },
       addLabel: "New Player",
     });
     GK.initPWA({ appName: "Chicken Cross" });
@@ -41,7 +41,8 @@ const App = {
     Game.boot();
     // Before a player is picked, show the look their last session used.
     const lastP = GK.Profiles.lastProfile();
-    this.applyLook(lastP ? Storage.getProgress(lastP.id).look : this.deviceLook());
+    if (lastP) this.applyPrefs(Storage.getProgress(lastP.id));
+    else { this.applyLook(this.deviceLook()); this.applyView(this.deviceView()); }
     this.el("lb-back").onclick = () => this.showScreen(this.profile?"map":"splash");
     this.refreshSplash();
     // Firestore sync runs in the background; the game is playable immediately.
@@ -51,7 +52,7 @@ const App = {
       if (ok && this.screen === "profiles") GK.Profiles.renderList();
       // a synced player may have picked a different look on another device
       const p = this.profile || GK.Profiles.lastProfile();
-      if (ok && p) this.applyLook(Storage.getProgress(p.id).look);
+      if (ok && p) this.applyPrefs(Storage.getProgress(p.id));
       if (ok && this.screen === "splash") this.refreshSplash();
     });
   },
@@ -143,11 +144,20 @@ const App = {
     Game.begin({ mode:"endless", params, target:0 });
   },
 
-  /* ----- settings: look + character, saved per player ----- */
+  /* ----- settings: view + look + character, saved per player ----- */
   // Both live in the player's progress, so they follow her to other devices.
   birdOf(p) {
     if (!p) return "🐔";
     return Storage.getProgress(p.id).bird || p.avatar || "🐔";
+  },
+  applyPrefs(g) { this.applyLook(g.look); this.applyView(g.view); },
+  deviceView() {
+    try { return localStorage.getItem("cc_view") || "2d"; } catch (e) { return "2d"; }
+  },
+  applyView(view) {
+    view = view === "3d" ? "3d" : "2d";
+    Game.setView(view);
+    try { localStorage.setItem("cc_view", view); } catch (e) {}
   },
   deviceLook() {
     try { return localStorage.getItem("cc_look") || "new"; } catch (e) { return "new"; }
@@ -172,6 +182,7 @@ const App = {
     g[key] = val;
     Storage.saveProgress(this.profile.id, g);
     if (key === "look") this.applyLook(val);
+    if (key === "view") this.applyView(val);
     Sfx.click();
     this.renderSettings();
   },
@@ -179,6 +190,13 @@ const App = {
     const g = Storage.getProgress(this.profile.id);
     const look = g.look === "classic" ? "classic" : "new";
     const bird = this.birdOf(this.profile);
+    const view = g.view === "3d" ? "3d" : "2d";
+    document.querySelectorAll("#settings-modal [data-view]").forEach(b => {
+      b.setAttribute("aria-pressed", String(b.dataset.view === view));
+      b.onclick = () => { if (b.dataset.view !== view) this.saveSetting("view", b.dataset.view); };
+    });
+    // In 3D the look only styles the menus; say so rather than let it seem broken.
+    this.el("look-note").style.display = view === "3d" ? "" : "none";
     document.querySelectorAll("#settings-modal [data-look]").forEach(b => {
       b.setAttribute("aria-pressed", String(b.dataset.look === look));
       b.onclick = () => { if (b.dataset.look !== look) this.saveSetting("look", b.dataset.look); };

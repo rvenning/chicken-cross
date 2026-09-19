@@ -1,5 +1,5 @@
 <meta charset="utf-8" />
-<meta name="gk-version" content="29" data-date="2026-09-17" data-kit="1.10.1">
+<meta name="gk-version" content="30" data-date="2026-09-19" data-kit="1.10.1">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
@@ -112,7 +112,12 @@
 <div class="modal" id="settings-modal">
   <div class="sheet settings-sheet">
     <h2>⚙️ Settings</h2>
-    <h3 id="look-label">Look</h3>
+    <h3 id="view-label">View</h3>
+    <div class="seg" role="group" aria-labelledby="view-label">
+      <button data-view="2d" aria-pressed="false">🗺️ 2D<small>flat, from above</small></button>
+      <button data-view="3d" aria-pressed="false">🧊 3D<small>blocky world</small></button>
+    </div>
+    <h3 id="look-label">Look <span class="note" id="look-note">· 2D only</span></h3>
     <div class="seg" role="group" aria-labelledby="look-label">
       <button data-look="new" aria-pressed="false">✨ New<small>detailed worlds</small></button>
       <button data-look="classic" aria-pressed="false">🕹️ Classic<small>the original look</small></button>
@@ -142,4 +147,5 @@
 <script src="js/art.js"></script>
 <script src="js/render.js"></script>
 <script src="js/render-legacy.js"></script>
+<script src="js/render3d.js"></script>
 <script src="js/main.js"></script>

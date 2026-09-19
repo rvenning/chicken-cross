@@ -58,6 +58,29 @@ Object.assign(Game, {
     this.TILE = Math.min(w/COLS, h/11);
     this.X0 = (w - COLS*this.TILE)/2;
     this.extC = this.X0/this.TILE + 1.2; // tiles of travel beyond the playfield
+    // The angled 3D camera sees round the corners of the playfield, so the
+    // hazards have to loop further out before they wrap. Car spacing is set
+    // per tile, so a longer loop carries more cars at the same density.
+    if (this.view === "3d") this.extC = Math.max(this.extC, R3.extFor(w, h, this.TILE));
+  },
+
+  // 2D or 3D. Saved per player like the look; the 3D renderer is fetched the
+  // first time it is asked for, and the 2D one draws until it is ready.
+  view: "2d",
+  setView(view) {
+    this.view = view === "3d" ? "3d" : "2d";
+    if (this.view === "3d") R3.load();
+    else { R3.hide(); if (this.canvas && this.theme) this.canvas.style.background = this.theme.bg; }
+    if (this.canvas) this.resize();
+  },
+
+  draw() {
+    if (this.view === "3d" && R3.ready) R3.frame();
+    else {
+      R3.hide();
+      if (this.canvas.style.background === "transparent" && this.theme) this.canvas.style.background = this.theme.bg;
+      this.render();
+    }
   },
 
 
@@ -114,8 +137,8 @@ Object.assign(Game, {
     GK.Debug.frame(dt);        // real delta, before the clamp, so fps is honest
     if (dt>0.05) dt=0.05;
     // paused: keep rendering the frozen frame (behind the overlay), don't advance
-    if (this.active) { if (!this.paused) { this.update(dt); this.juice(dt); } this.render(); }
-    else this.ctx.clearRect(0,0,this.W,this.H);
+    if (this.active) { if (!this.paused) { this.update(dt); this.juice(dt); } this.draw(); }
+    else { this.ctx.clearRect(0,0,this.W,this.H); R3.hide(); }
     requestAnimationFrame(t=>this.loop(t));
   },
 
