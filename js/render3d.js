@@ -28,6 +28,7 @@ const R3 = {
   PITCH: 57 * Math.PI / 180,
   YAW: 13 * Math.PI / 180,
 
+  AHEAD: 4,              // rows built in advance above the top of the screen
   WATER_Y: -0.2,         // water surface; land is at 0
   LOG_TOP: 0.14,
 
@@ -119,7 +120,7 @@ const R3 = {
     this.sun = new T.DirectionalLight(0xffffff, 2.3);
     this.sun.castShadow = true;
     const sc = this.sun.shadow;
-    sc.mapSize.set(2048, 2048);
+    sc.mapSize.set(1024, 1024);   // fitted to the view each resize -- see fitShadow()
     Object.assign(sc.camera, { left: -15, right: 15, top: 15, bottom: -15, near: 1, far: 60 });
     sc.camera.updateProjectionMatrix();
     sc.bias = -0.0006; sc.normalBias = 0.02;
@@ -236,14 +237,18 @@ const R3 = {
   halfWide() { return Math.ceil(Game.extC) + COLS / 2 + 10; },
 
   buildRow(row, lane) {
-    const G = Game, th = G.theme, A = Art.pal(G.wi), b = this.bag();
+    // Two bags per lane: `b` for things that stand up and cast shadows, `f`
+    // for everything flat. Flat ground can't shadow anything the camera sees,
+    // so it stays out of the shadow pass; before, it covered the whole shadow
+    // map every frame for nothing.
+    const G = Game, th = G.theme, A = Art.pal(G.wi), b = this.bag(), f = this.bag();
     const rec = { row, lane, group: null, cars: [], logs: [], train: null, arms: [], lamps: [], coin: null, ripples: null };
     const z = -row, HW = this.halfWide(), PF = COLS / 2;
 
     // A lane's ground: the playfield strip, and darker ground beyond it on both
     // sides, which is what tells you where the edge of the game is.
     const ground = (color, top, depth, glow) => {
-      const into = glow ? this.lit(b) : b;
+      const into = glow ? this.lit(f) : f;
       this.box(into, color, 0, top - depth / 2, z, COLS, depth, 1);
       const side = this.dark(color, 0.22), w = HW - PF;
       this.box(into, side, -(PF + w / 2), top - depth / 2, z, w, depth, 1);
@@ -257,7 +262,7 @@ const R3 = {
       // litter: flat flecks that break the colour up without looking solid
       for (let col = -Math.ceil(G.extC) - 4; col < COLS + Math.ceil(G.extC) + 4; col++) {
         const h = hash2(row * 5 + 3, col * 7 + 1);
-        if (h < 0.3) this.box(b, A.litter, this.X(col) + (h * 7 % 1 - 0.5) * 0.6, 0.012, z + (h * 13 % 1 - 0.5) * 0.6, 0.14, 0.024, 0.1);
+        if (h < 0.3) this.box(f, A.litter, this.X(col) + (h * 7 % 1 - 0.5) * 0.6, 0.012, z + (h * 13 % 1 - 0.5) * 0.6, 0.14, 0.024, 0.1);
       }
       for (const col of lane.trees) this.obstacle(b, this.X(col), z, (col * 7 + row) % 3 === 0, row * 97 + col);
       // planting beyond the playfield, same painters as the real obstacles
@@ -271,10 +276,10 @@ const R3 = {
       // dashes between two road lanes, like the 2D road
       const next = G.world[row + 1];
       if (next && next.type === "road")
-        for (let x = -HW; x < HW; x += 1) this.box(b, "#f2f2ea", x + 0.5, -0.012, z - 0.5, 0.42, 0.02, 0.06);
+        for (let x = -HW; x < HW; x += 1) this.box(f, "#f2f2ea", x + 0.5, -0.012, z - 0.5, 0.42, 0.02, 0.06);
       // kerb where the road meets anything else
       const prev = G.world[row - 1];
-      if (!prev || prev.type !== "road") this.box(b, this.light(th.road, 0.35), 0, -0.01, z + 0.47, HW * 2, 0.03, 0.06);
+      if (!prev || prev.type !== "road") this.box(f, this.light(th.road, 0.35), 0, -0.01, z + 0.47, HW * 2, 0.03, 0.06);
       for (const car of lane.cars) {
         const m = this.car(car.kind, lane.color, lane.dir, car.width);
         m.position.set(this.X(car.x), 0, z);
@@ -290,8 +295,8 @@ const R3 = {
       rec.ripples.position.z = z;
     } else if (lane.type === "rail") {
       ground(this.mix(th.road, "#a39788", 0.6), 0, 0.7);
-      for (let x = -HW; x < HW; x += 0.5) this.box(b, "#6b4a33", x + 0.25, 0.03, z, 0.14, 0.05, 0.84);
-      for (const dz of [-0.24, 0.24]) this.box(b, "#c9ced3", 0, 0.08, z + dz, HW * 2, 0.06, 0.06);
+      for (let x = -HW; x < HW; x += 0.5) this.box(f, "#6b4a33", x + 0.25, 0.03, z, 0.14, 0.05, 0.84);
+      for (const dz of [-0.24, 0.24]) this.box(f, "#c9ced3", 0, 0.08, z + dz, HW * 2, 0.06, 0.06);
       rec.train = this.train(lane.dir);
       rec.train.position.z = z;
       rec.train.visible = false;
@@ -302,6 +307,7 @@ const R3 = {
 
     rec.group = this.object(b);
     const grp = rec.group;
+    for (const m of this.object(f, false).children) grp.add(m);
     for (const m of rec.cars) grp.add(m);
     for (const m of rec.logs) grp.add(m);
     if (rec.train) grp.add(rec.train);
@@ -889,7 +895,8 @@ const R3 = {
     this.rows.clear();
   },
 
-  hide() { if (this.canvas) this.canvas.style.display = "none"; },
+  // Whenever the 3D view is not drawing, something else may paint the 2D canvas.
+  hide() { if (this.canvas) this.canvas.style.display = "none"; this.overlayClean = false; },
 
   // Lights and sky follow the world, so Night Roads is night in 3D too.
   setWorld(G) {
@@ -898,18 +905,100 @@ const R3 = {
     this.hemi.color.set(night ? 0x8fa6ff : 0xffffff);
     this.hemi.groundColor.set(night ? 0x2a2a3a : 0x6d6450);
     this.hemi.intensity = night ? 1.0 : 1.15;
-    this.lamp.intensity = night ? 3 : 0;
+    // Hidden rather than dimmed: a light at zero intensity is still in every
+    // shader. Changing the light count recompiles them, once per world.
+    this.lamp.intensity = 3;
+    this.lamp.visible = night;
     this.sun.color.set(night ? 0xb8c8ff : 0xfff4e0);
     this.sun.intensity = night ? 1.3 : 2.6;
     this.worldKey = G.world;
+    // Bake every car, log and train this world can show now, while the level
+    // is starting, rather than the first time one scrolls into view.
+    for (const color of CAR_COLORS) for (const [kind, w] of [["car", 1], ["truck", 2]]) this.car(kind, color, 1, w);
+    for (const len of [2, 3]) this.log(len);
+    this.train(1);
+    this.settle = performance.now() + 1500;   // shader compiles; don't judge pace yet
   },
+
+  /* ---------------------------------------------------------- pacing */
+
+  // A safety net for slower tablets. If frames average slower than ~45 fps
+  // for a second, drop the render resolution a step and see if that helped.
+  // If it didn't -- a device capped at 30 fps in Low Power Mode, say --
+  // put it back and stop trying, rather than blur the game for nothing.
+  SCALES: [1, 0.85, 0.7, 0.6],
+  step: 0, frozen: false, trial: null, win: null,
+
+  pace(now) {
+    const dt = now - (this.lastT || now);
+    this.lastT = now;
+    if (!(dt > 0) || dt > 100) { this.win = null; return; }   // first frame, pause, tab switch
+    if (this.frozen || now < (this.settle || 0)) return;
+    const w = this.win || (this.win = { n: 0, sum: 0 });
+    w.n++; w.sum += dt;
+    if (w.n < 60) return;
+    const avg = w.sum / w.n;
+    this.win = null;
+    if (this.trial) {
+      if (avg > this.trial.before * 0.85) { this.step--; this.frozen = true; this.resize(Game); }
+      this.trial = null;
+    } else if (avg > 22 && this.step < this.SCALES.length - 1) {
+      this.trial = { before: avg };
+      this.step++; this.resize(Game);
+      this.settle = now + 300;
+    }
+  },
+
+  sizeKey(G) { return G.W + "x" + G.H + "@" + Math.min(window.devicePixelRatio || 1, 2) + ":" + G.TILE; },
 
   resize(G) {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    this.renderer.setPixelRatio(dpr);
+    this.renderer.setPixelRatio(dpr * this.SCALES[this.step]);
     this.renderer.setSize(G.W, G.H, false);
     this.canvas.style.width = G.W + "px"; this.canvas.style.height = G.H + "px";
-    this.size = G.W + "x" + G.H + "@" + dpr + ":" + G.TILE;
+    this.size = this.sizeKey(G);
+    this.fitShadow(G);
+  },
+
+  // The sun, relative to the point the camera looks at.
+  SUN: [6, 14, -3],
+
+  // Fit the sun's shadow box to what the camera can actually see. A fixed
+  // 30x30-tile box redrew every tree and car off the edges of the screen into
+  // the shadow map each frame; fitted, it draws a third fewer and a 1024 map
+  // is as sharp as the 2048 one was.
+  fitShadow(G) {
+    const T = this.T, P = this.pxPerTile(G.W, G.H), th = this.PITCH, ph = this.YAW;
+    const back = new T.Vector3(Math.sin(ph) * Math.cos(th), Math.sin(th), Math.cos(ph) * Math.cos(th));
+    const right = new T.Vector3(Math.cos(ph), 0, -Math.sin(ph));
+    const up = new T.Vector3().crossVectors(back, right);
+    const ax = new T.Vector3(), ay = new T.Vector3(), az = new T.Vector3();
+    new T.Matrix4().lookAt(new T.Vector3(...this.SUN), new T.Vector3(), new T.Vector3(0, 1, 0)).extractBasis(ax, ay, az);
+    const halfW = G.W / (2 * P), halfH = G.H / (2 * P), p = new T.Vector3();
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    // each screen corner, walked down its view ray to the ground and to the
+    // top of the tallest tree
+    for (const a of [-halfW, halfW]) for (const b of [-halfH, halfH]) for (const h of [0, 1.3]) {
+      p.copy(right).multiplyScalar(a).addScaledVector(up, b);
+      p.addScaledVector(back, -(p.y - h) / back.y);
+      const u = p.dot(ax), v = p.dot(ay);
+      x0 = Math.min(x0, u); x1 = Math.max(x1, u); y0 = Math.min(y0, v); y1 = Math.max(y1, v);
+    }
+    const pad = 1.5, sc = this.sun.shadow.camera;   // pad: shadows cast from just off screen
+    Object.assign(sc, { left: x0 - pad, right: x1 + pad, bottom: y0 - pad, top: y1 + pad });
+    sc.updateProjectionMatrix();
+    this.sunAxes = [ax, ay];
+    this.texel = Math.max(x1 - x0, y1 - y0) / this.sun.shadow.mapSize.x;
+  },
+
+  // Aim the sun at the camera's target, snapped to whole shadow-map texels,
+  // so the shadows of things standing still hold still as the camera creeps.
+  aimSun(tx, tz) {
+    const [ax, ay] = this.sunAxes, ts = this.texel, t = this._v.set(tx, 0, tz);
+    const u = t.dot(ax), v = t.dot(ay);
+    t.addScaledVector(ax, Math.round(u / ts) * ts - u).addScaledVector(ay, Math.round(v / ts) * ts - v);
+    this.sun.target.position.copy(t);
+    this.sun.position.set(t.x + this.SUN[0], t.y + this.SUN[1], t.z + this.SUN[2]);
   },
 
   frame() {
@@ -918,9 +1007,9 @@ const R3 = {
     G.wi = (G.params && G.params.wi) || 0;
     G.night = !!Art.pal(G.wi).night;
     if (G.world !== this.worldKey) { this.reset(); this.setWorld(G); }
-    if (this.size !== G.W + "x" + G.H + "@" + Math.min(window.devicePixelRatio || 1, 2) + ":" + G.TILE) {
-      this.resize(G); this.reset();
-    }
+    const now = performance.now();
+    if (this.size !== this.sizeKey(G)) { this.resize(G); this.reset(); }
+    this.pace(now);
     this.canvas.style.display = "block";
     if (G.canvas.style.background !== "transparent") G.canvas.style.background = "transparent";
 
@@ -940,31 +1029,43 @@ const R3 = {
     // Sun high on the right and a little ahead, so shadows fall left and
     // toward the camera -- onto ground the player can see -- and the lit
     // right-hand faces are the ones the camera looks at.
-    this.sun.position.set(tx + 6, 14, tz - 3);
-    this.sun.target.position.set(tx, 0, tz);
+    this.aimSun(tx, tz);
 
-    // rows: build what came into view, drop what left it
-    for (let r = f.lo; r <= f.hi; r++) {
+    // Rows: everything on screen must exist this frame. Past the top edge,
+    // build ahead one row per frame, so a lane is ready before it scrolls in
+    // and building never lands on a frame the player is watching.
+    let spare = 1;
+    for (let r = f.lo; r <= f.hi + this.AHEAD; r++) {
       if (r > G.maxGen) G.ensureRows(r);
       const lane = r < 0 ? null : G.world[r];
       let rec = this.rows.get(r);
       if (rec && rec.lane !== lane) { this.dropRow(rec); rec = null; }
-      if (!rec) { rec = this.buildRow(r, lane); this.rows.set(r, rec); }
+      if (!rec) {
+        if (r > f.hi && spare-- <= 0) continue;
+        rec = this.buildRow(r, lane); this.rows.set(r, rec);
+      }
       this.updateRow(rec, G);
     }
-    for (const [r, rec] of this.rows) if (r < f.lo - 3 || r > f.hi + 3) { this.dropRow(rec); this.rows.delete(r); }
+    for (const [r, rec] of this.rows) if (r < f.lo - 3 || r > f.hi + this.AHEAD + 2) { this.dropRow(rec); this.rows.delete(r); }
 
-    this.updateChick(G, performance.now());
+    this.updateChick(G, now);
     this.fx.puffs(G);
     this.renderer.render(this.scene, cam);
 
     // The 2D canvas stays on top for the things that belong to the screen, not
     // the world: the camera-creep warning and the win confetti. It also keeps
     // receiving touches, so input needed no changes at all.
+    //
+    // Most frames it has nothing on it, and a canvas nobody touches costs
+    // nothing: the browser only re-uploads and re-blends a full-screen layer
+    // that changed. So it is cleared once when it empties, then left alone.
+    const Fx = GK.Fx, busy = G._danger >= 0.02 || Fx.parts.length || Fx.texts.length || Fx.flash > 0;
+    if (!busy && this.overlayClean) return;
     const ctx = G.ctx;
     ctx.clearRect(0, 0, G.W, G.H);
     G.drawDanger();
-    GK.Fx.render(ctx);
+    Fx.render(ctx);
+    this.overlayClean = !busy;
   },
 };
 

@@ -88,6 +88,39 @@ test("the opening levels are still winnable with the 3D loop width", () => {
   } finally { Game.setView("2d"); }
 });
 
+// Feed the resolution safety net synthetic frame times: `dtFor(step)` is how
+// long a frame takes at each resolution step.
+function pacing(dtFor, frames = 600) {
+  const resize = R3.resize;
+  R3.resize = () => {};             // no renderer headlessly; only the step matters
+  Object.assign(R3, { step: 0, frozen: false, trial: null, win: null, settle: 0, lastT: 0 });
+  let t = 1000;
+  try { for (let i = 0; i < frames; i++) { t += dtFor(R3.step); R3.pace(t); } }
+  finally { R3.resize = resize; }
+  const out = { step: R3.step, frozen: R3.frozen };
+  Object.assign(R3, { step: 0, frozen: false, trial: null, win: null });
+  return out;
+}
+
+test("resolution drops a step at a time while it helps a slow GPU", () => {
+  assert.deepStrictEqual(pacing((s) => [30, 24, 19, 15][s]), { step: 2, frozen: false });
+});
+
+test("a device capped at 30 fps gets full resolution back, and is left alone", () => {
+  assert.deepStrictEqual(pacing(() => 33.3), { step: 0, frozen: true });
+});
+
+test("a device that keeps up is never touched", () => {
+  assert.deepStrictEqual(pacing(() => 16.7), { step: 0, frozen: false });
+  assert.deepStrictEqual(pacing(() => 8.3), { step: 0, frozen: false });
+});
+
+test("pauses and tab switches are not mistaken for slow frames", () => {
+  // mostly fine, with a long gap every second (a pause overlay, a tab switch)
+  let i = 0;
+  assert.deepStrictEqual(pacing(() => (++i % 60 === 0 ? 900 : 16.7)), { step: 0, frozen: false });
+});
+
 test("sync keeps the newer copy's view", () => {
   const a = { coins: 0, best: 0, levels: {}, updated: 100, view: "3d" };
   const b = { coins: 0, best: 0, levels: {}, updated: 200, view: "2d" };
