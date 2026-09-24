@@ -6,18 +6,23 @@ dodge the cars, ride the logs, and don't argue with the trains.
 **Play it:** https://rvenning.github.io/chicken-cross/
 
 ## Features
-- 🗺️ 10 worlds × 4 levels (Sunny Meadows to the lava rivers of Volcano Finale), plus ♾️ Endless mode
+- ▶ **Hop In**: Endless is the main event — one tap from the home screen (or straight from the splash) into a run that travels through all ten worlds, built from readable chunks: road blocks (convoys, zig-zags, express lanes, hauliers), rivers, railway encounters and rest rows
+- 💨 No creeping camera in Endless: it follows you, and only warns — then pushes — a bird that stops making progress for several seconds
+- ↻ Quick retry: the result card appears half a second after a crash; tap anywhere or press Space to go again
+- 🐣 **420 characters** in 33 collections, built from 39 body plans (birds, farm and woodland animals, pets, reptiles, minibeasts, sea creatures, dragons, ghosts, robots, food, a teapot, people) with hats, scarves, capes, markings, hop particles, voices and a few presentation themes. All cosmetic: every character has the same hitbox, hop and score
+- 🎰 Prize Machine: 🪙100 for a character you don’t have yet — every one equally likely, never a duplicate. Others come from achievements, secrets and annual events. No ads, no real money
+- 🗺️ Worlds: 10 worlds × 4 levels (Sunny Meadows to the lava rivers of Volcano Finale), the original campaign
 - 🚂 Railway crossings with warning lights, lowering gates, and very fast trains
 - 🪙 Coins to collect; 💛 spend 50 to revive where you died
 - ⭐ Up to 3 stars per level (finish + coin bonuses)
-- 🐔🦆🐧 Your profile avatar is who you play — every bird has its own hand-drawn sprite (mallard, penguin, owl, flamingo, peacock…)
+- 🐔🦆🐧 The twelve original birds are the Founding Flock, owned by everyone; an old save keeps its chosen bird
 - 👨‍👩‍👧 Pick-a-name family profiles — no passwords; optional 4-digit PIN per profile with an admin override
 - 🏆 Shared family leaderboard (best distance)
 - 🔊 All sound effects synthesized with WebAudio (no asset downloads)
 - ☁️ Firebase Firestore sync (falls back to localStorage offline)
 - 📱 iPad-first controls: tap to hop, swipe to steer (fires mid-gesture, Crossy-Road style); works with keyboard/WASD on desktop
 - 📲 Installable PWA: "Add to Home Screen" button, offline play via service worker
-- 🧊 Optional 3D view (⚙️ Settings → View): a blocky, Crossy-Road-style world drawn with three.js — same rules, same levels, per-world trees, night lighting and lava
+- 🧊 3D view by default wherever WebGL works (⚙️ Settings → View switches to 2D, and the choice is remembered): a blocky world drawn with three.js — same rules, same levels
 - 🌊 Watery water, as requested by Nathan
 
 ## Built on gamekit
@@ -31,8 +36,17 @@ node tools/sync-to-game.js "D:\OneDrive\Documents\Claude Code\chicken-cross"
 # then test, bump the CACHE version in sw.js, and commit
 ```
 
-Everything game-specific — the canvas engine, worlds/levels, bird sprites, jingles —
-lives in `index.html`.
+Everything game-specific lives in `js/`: the simulation (`game.js`), the 2D and 3D
+renderers (`render.js`, `render3d.js`), the art (`art.js`), the character body plans
+(`characters.js` + `plans.js` in 2D, `characters3d.js` in 3D), the roster and its
+unlocks (`roster.js`, one line per character in `roster-data.js`) and the menus
+(`main.js`, `collection-ui.js`).
+
+## Adding a character
+Add one line to a collection in `js/roster-data.js`, e.g.
+`"Captain Claw | crab | body=c8303a hat=pirate r=2"`, then run `node --test`:
+`tests/roster.test.js` checks all 420 — unique names, a real plan and unlock, the
+colours the painter needs, and that the 2D and 3D art stay inside the legibility budget.
 
 ## The 3D view
 `js/render3d.js` is a second renderer over the same simulation; it only reads `Game`

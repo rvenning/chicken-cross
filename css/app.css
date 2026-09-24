@@ -100,10 +100,12 @@
   background: linear-gradient(180deg, rgba(63,155,224,.95) 70%, rgba(63,155,224,0)); }
 .coll-tools input, .coll-tools select { font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 12px;
   border: 2px solid rgba(255,255,255,.7); background: #fff; color: #12232e; min-height: 44px; }
-.coll-tools input { flex: 1 1 180px; }
-.coll-tools select { flex: 1 1 160px; }
-.chips { display: flex; gap: 6px; flex-wrap: wrap; width: 100%; }
-.chips button { font: inherit; font-weight: 800; font-size: 14px; padding: 8px 14px; border-radius: 999px;
+.coll-tools input { flex: 1 1 140px; min-width: 0; }
+.coll-tools select { flex: 1 1 120px; min-width: 0; }
+/* one scrolling row of filters, so the bar never eats half a phone screen */
+.chips { display: flex; gap: 6px; width: 100%; overflow-x: auto; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chips button { flex: none; font: inherit; font-weight: 800; font-size: 14px; padding: 6px 14px; border-radius: 999px;
   border: 2px solid rgba(255,255,255,.8); background: rgba(255,255,255,.2); color: #fff; cursor: pointer; min-height: 40px; }
 .chips button[aria-pressed="true"] { background: #fff; color: #12232e; }
 .coll-sec h3 { display: flex; justify-content: space-between; align-items: baseline; margin: 16px 2px 4px;
@@ -140,8 +142,8 @@
 .machine .dome { position: absolute; left: 15px; top: 0; width: 140px; height: 120px; border-radius: 70px 70px 20px 20px;
   background: radial-gradient(circle at 35% 30%, #ffffffd0, #bfe6ff90 40%, #6fb8e8a0); border: 4px solid #2670ab; overflow: hidden; }
 .machine .dome i { position: absolute; width: 30px; height: 30px; border-radius: 50%;
-  left: calc(8px + (var(--i) * 37px) % 110px); top: calc(56px + (var(--i) * 13px) % 44px);
-  background: hsl(calc(var(--i) * 40deg) 80% 62%); box-shadow: inset -4px -4px 0 rgba(0,0,0,.15); }
+  box-shadow: inset -4px -4px 0 rgba(0,0,0,.15); }
+.btn.pz-go { flex-direction: column; gap: 0; }
 .machine .base { position: absolute; left: 25px; top: 112px; width: 120px; height: 72px; border-radius: 10px 10px 14px 14px;
   background: #e8403a; box-shadow: inset 0 -8px 0 rgba(0,0,0,.18); }
 .machine .slot { position: absolute; left: 40px; top: 30px; width: 40px; height: 28px; border-radius: 8px; background: #7a1f1a; }

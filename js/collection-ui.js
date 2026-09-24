@@ -7,6 +7,10 @@
 // the screen never paints 420 canvases at once.
 "use strict";
 
+// Capsules piled in the dome of the Prize Machine: fixed spots, fixed colours.
+const CAPSULES = [[8, 60, 0], [40, 68, 50], [74, 58, 200], [100, 70, 120], [22, 86, 280], [58, 88, 30], [90, 90, 320], [30, 40, 170], [80, 34, 90]]
+  .map(([x, y, h]) => `<i style="left:${x}px;top:${y}px;background:hsl(${h} 80% 62%)"></i>`).join("");
+
 const Coll = {
   filter: "all", col: "", query: "",
 
@@ -156,12 +160,12 @@ const Coll = {
     const g = App.prog(), left = Collection.prizePool(g).length, can = (g.coins || 0) >= PRIZE_COST;
     const sheet = App.el("prize-sheet");
     sheet.innerHTML = `<h2>🎰 Prize Machine</h2>
-      <div class="machine" id="machine"><div class="dome">${Array.from({ length: 9 }, (_, i) => `<i style="--i:${i}"></i>`).join("")}</div>
+      <div class="machine" id="machine"><div class="dome">${CAPSULES}</div>
         <div class="base"><div class="slot"></div></div><div class="capsule" id="capsule"></div></div>
       <p class="prize-odds">${left ? `${left} characters left to win. Each one is equally likely, and you never get one you already have.` : "You have won every prize there is. Amazing!"}</p>
       <p class="prize-coins">🪙 <b>${g.coins || 0}</b> ${can || !left ? "" : `· ${PRIZE_COST - (g.coins || 0)} more to go`}</p>
       ${msg ? `<p class="prize-msg">${esc(msg)}</p>` : ""}
-      <button class="btn green wide" id="pz-go" ${can && left ? "" : "disabled"}>Turn the handle · 🪙${PRIZE_COST}</button>
+      <button class="btn green wide pz-go" id="pz-go" ${can && left ? "" : "disabled"}>Turn the handle<small>🪙${PRIZE_COST}</small></button>
       <button class="btn blue wide" id="pz-close">Close</button>`;
     App.el("pz-close").onclick = () => { Sfx.click(); App.closeModal("prize-modal"); this.refreshBehind(); };
     App.el("pz-go").onclick = () => this.pull();
@@ -188,8 +192,8 @@ const Coll = {
       <h2>${esc(ch.name)}</h2>
       <p class="char-meta">${esc(col.emoji + " " + col.name)} · <b style="color:${R.color}">${R.label}</b></p>
       <div class="row-btns2">
-        <button class="btn green" id="pz-play">Play as ▶</button>
-        <button class="btn" id="pz-again" ${can ? "" : "disabled"}>Again · 🪙${PRIZE_COST}</button>
+        <button class="btn green" id="pz-play">▶ Play</button>
+        <button class="btn" id="pz-again" ${can ? "" : "disabled"}>Again<small>🪙${PRIZE_COST}</small></button>
       </div>
       <button class="btn blue wide" id="pz-close">Done</button>`;
     App.paintChar(sheet.querySelector("canvas"), ch, { w: 180, h: 160, size: 74, base: 0.82, shadow: true });
