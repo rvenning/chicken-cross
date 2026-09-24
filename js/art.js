@@ -47,6 +47,7 @@ const ART_WORLDS = [
     decor: [["tuft", 26, 1], ["tuft", 44, 0.55], ["clover", 12, 1], ["flower", 9, 1]],
     litter: "#8fd36a", soil: "#5d9c3f",
     mote: { color: "rgba(255,250,190,0.55)", n: 10, rise: -6, drift: 14, size: 1.6 },
+    cars: ["sedan","hatch","pickup","tractor"], trucks: ["box","flatbed"], verge: ["mailbox","hay","sign"],
   },
   { // 1 Busy City -- mown verges, kerbside litter
     tree: "clipped", rock: "bollard",
@@ -55,6 +56,7 @@ const ART_WORLDS = [
     decor: [["mow", 4, 1], ["tuft", 30, 0.6], ["pebble", 14, 0.8]],
     litter: "#9ad6a2", soil: "#5f9463",
     mote: { color: "rgba(226,236,246,0.4)", n: 7, rise: -3, drift: 22, size: 1.4 },
+    cars: ["sedan","taxi","hatch","van"], trucks: ["bus","box"], verge: ["lamp","hydrant","bench"],
   },
   { // 2 Rushing River -- lush and wet
     tree: "willow", rock: "boulder",
@@ -63,6 +65,7 @@ const ART_WORLDS = [
     decor: [["tuft", 30, 1.1], ["tuft", 48, 0.55], ["reed", 14, 1], ["clover", 10, 0.9]],
     litter: "#83cf63", soil: "#4e9138",
     mote: { color: "rgba(210,240,255,0.5)", n: 12, rise: -4, drift: 18, size: 1.5 },
+    cars: ["sedan","beetle","pickup","van"], trucks: ["box","flatbed"], verge: ["sign","mailbox","bench"],
   },
   { // 3 Frozen Tracks -- snow, and everything under it
     tree: "fir", rock: "ice",
@@ -71,6 +74,7 @@ const ART_WORLDS = [
     decor: [["drift", 22, 1.3], ["drift", 14, 0.7], ["crystal", 16, 1], ["pebble", 8, 0.7]],
     litter: "#eaf6fb", soil: "#b6d8e4",
     mote: { color: "rgba(255,255,255,0.75)", n: 16, rise: 8, drift: 10, size: 2 },
+    cars: ["sedan","jeep","van","plough"], trucks: ["tanker","box"], verge: ["snowman","lamp","sign"],
   },
   { // 4 Rush Hour -- late afternoon, dry verges
     tree: "hedge", rock: "boulder",
@@ -79,6 +83,7 @@ const ART_WORLDS = [
     decor: [["tuft", 24, 0.9], ["tuft", 40, 0.5], ["pebble", 12, 0.9]],
     litter: "#6f9c58", soil: "#40632f",
     mote: { color: "rgba(255,214,150,0.42)", n: 9, rise: -5, drift: 16, size: 1.6 },
+    cars: ["sedan","taxi","van","hatch"], trucks: ["bus","box","tanker"], verge: ["lamp","cone","hydrant"],
   },
   { // 5 Night Roads -- fireflies do the work here, and headlights carry
     night: true,
@@ -88,6 +93,7 @@ const ART_WORLDS = [
     decor: [["tuft", 22, 0.95], ["tuft", 36, 0.5], ["clover", 8, 0.9]],
     litter: "#4c7a45", soil: "#2d4c2a",
     mote: { color: "rgba(190,255,150,0.85)", n: 12, rise: -3, drift: 9, size: 2.1, glow: true },
+    cars: ["sedan","beetle","taxi","van"], trucks: ["box","bus"], verge: ["lamp","sign"],
   },
   { // 6 Desert Dash -- cacti, not trees
     tree: "cactus", rock: "sandstone",
@@ -96,6 +102,7 @@ const ART_WORLDS = [
     decor: [["ripple", 20, 1], ["pebble", 18, 0.9], ["scrub", 10, 1]],
     litter: "#e8cd84", soil: "#bb9a4f",
     mote: { color: "rgba(255,236,180,0.40)", n: 8, rise: -2, drift: 26, size: 1.5 },
+    cars: ["jeep","pickup","beetle"], trucks: ["tanker","flatbed"], verge: ["sign","palmSign","cone"],
   },
   { // 7 Jungle Rapids -- palms and leaf litter
     tree: "palm", rock: "boulder",
@@ -104,6 +111,7 @@ const ART_WORLDS = [
     decor: [["leaf", 20, 1], ["tuft", 34, 0.9], ["tuft", 46, 0.5], ["reed", 8, 0.9]],
     litter: "#6fbb4f", soil: "#3c7a30",
     mote: { color: "rgba(220,255,190,0.45)", n: 12, rise: -6, drift: 12, size: 1.7 },
+    cars: ["jeep","pickup","beetle"], trucks: ["flatbed","box"], verge: ["palmSign","sign"],
   },
   { // 8 Grand Central -- scrubby railway land
     tree: "poplar", rock: "boulder",
@@ -112,6 +120,7 @@ const ART_WORLDS = [
     decor: [["tuft", 26, 0.85], ["tuft", 40, 0.5], ["pebble", 16, 0.9], ["scrub", 8, 0.9]],
     litter: "#a3bf87", soil: "#6d8a58",
     mote: { color: "rgba(240,236,214,0.38)", n: 8, rise: -3, drift: 20, size: 1.4 },
+    cars: ["taxi","sedan","van","hatch"], trucks: ["bus","box"], verge: ["lamp","bench","sign"],
   },
   { // 9 Volcano Finale -- ash, and cracks that glow
     night: true,
@@ -121,6 +130,7 @@ const ART_WORLDS = [
     decor: [["crack", 14, 1], ["pebble", 16, 0.9], ["ash", 22, 1]],
     litter: "#8a7166", soil: "#5a453c",
     mote: { color: "rgba(255,160,80,0.75)", n: 14, rise: -14, drift: 8, size: 1.8, glow: true },
+    cars: ["jeep","pickup","sedan"], trucks: ["tanker","fire"], verge: ["cone","sign"],
   },
 ];
 
@@ -214,30 +224,52 @@ Object.assign(Art, {
 // offscreen strip and blitted. Four variants per (world, lane type), picked by
 // row, because one baked strip repeated down the screen reads as wallpaper.
 //
-// The cache is bounded by construction: 4 types x 4 variants = 16 strips, and
-// the whole map is dropped when the geometry generation changes (resize, or a
-// new world). Nothing accumulates.
+// The cache is keyed by world as well as lane type and variant, because an
+// endless run crosses from one world into the next and both are on screen at
+// once. Bounded: 4 types x 4 variants per world, oldest dropped past STRIP_CAP
+// (three worlds, which is more than one screen ever shows), and the whole map
+// dropped when the geometry changes. Nothing accumulates.
 
-const STRIP_VARIANTS = 4;
+const STRIP_VARIANTS = 4, STRIP_CAP = 48;
 
 Object.assign(Art, {
   _strips: new Map(),
   _gen: "",
 
-  // Called by the renderer whenever geometry or world might have moved.
-  ensure(wi, theme, W, TILE, DPR) {
-    const gen = wi + "|" + Math.round(W) + "x" + Math.round(TILE) + "|" + DPR;
+  // Called by the renderer whenever geometry might have moved.
+  ensure(W, TILE, DPR) {
+    const gen = Math.round(W) + "x" + Math.round(TILE) + "|" + DPR;
     if (gen === this._gen) return;
     this._gen = gen;
     this._strips.clear();
-    this._geo = { wi, theme, W, TILE, DPR };
+    this._geo = { W, TILE, DPR };
   },
 
-  strip(type, variant) {
-    const key = type + variant;
+  // The world a lane wears: its own (endless runs travel through them), else
+  // the level's. A blend is the three-row meadow between two worlds.
+  laneWorld(lane, fallback) {
+    return lane && Number.isInteger(lane.wi) ? lane.wi : (fallback | 0);
+  },
+  _themes: new Map(),
+  themeOf(wi, blend) {
+    if (!blend) return WORLDS[Math.max(0, Math.min(WORLDS.length - 1, wi | 0))].theme;
+    const key = blend.from + ">" + blend.to + "@" + blend.t.toFixed(2);
+    let th = this._themes.get(key);
+    if (!th) {
+      const a = WORLDS[blend.from].theme, b = WORLDS[blend.to].theme;
+      th = {};
+      for (const k of Object.keys(a)) th[k] = mixHex(a[k], b[k], blend.t);
+      if (this._themes.size > 40) this._themes.clear();
+      this._themes.set(key, th);
+    }
+    return th;
+  },
+
+  strip(type, variant, wi, blend) {
+    const key = type + variant + "|" + wi + (blend ? ">" + blend.to + "@" + blend.t.toFixed(2) : "");
     let c = this._strips.get(key);
     if (c) return c;
-    const { wi, theme, W, TILE, DPR } = this._geo;
+    const { W, TILE, DPR } = this._geo, theme = this.themeOf(wi, blend);
     const H = Math.ceil(TILE) + 2;
     c = document.createElement("canvas");
     c.width = Math.max(1, Math.round(W * DPR));
@@ -247,24 +279,32 @@ Object.assign(Art, {
     // Every strip is drawn in the same logical coordinates the game uses, so
     // it lines up when blitted at the lane's top edge.
     GROUND[type](g, W, TILE, this.pal(wi), theme, variant);
+    if (this._strips.size >= STRIP_CAP) this._strips.delete(this._strips.keys().next().value);
     this._strips.set(key, c);
     return c;
   },
 
   // Blit the ground for one lane. `row` picks the variant, so the same row
   // always gets the same ground and the world is stable as the camera scrolls.
-  ground(ctx, type, row, top, W, TILE) {
+  ground(ctx, type, row, top, W, TILE, wi, blend) {
     const v = Math.floor(GK.util.hash2(row, 7) * STRIP_VARIANTS) % STRIP_VARIANTS;
-    const h = Math.ceil(TILE) + 2;
+    const h = Math.ceil(TILE) + 2, img = this.strip(type, v, wi | 0, blend);
     if (GK.util.hash2(row, 29) < 0.5) {
-      ctx.drawImage(this.strip(type, v), 0, top, W, h);
+      ctx.drawImage(img, 0, top, W, h);
     } else {
       ctx.save(); ctx.translate(W, 0); ctx.scale(-1, 1);
-      ctx.drawImage(this.strip(type, v), 0, top, W, h);
+      ctx.drawImage(img, 0, top, W, h);
       ctx.restore();
     }
   },
 });
+
+// sRGB mix of two #rrggbb colours, t=0 -> a.
+function mixHex(a, b, t) {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const ch = (s) => Math.round(((pa >> s) & 255) * (1 - t) + ((pb >> s) & 255) * t);
+  return "#" + ((1 << 24) | (ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).slice(1);
+}
 
 // A stable per-strip hash: same world, same variant, same speck positions on
 // every device. Salted per (variant, decor index) so two decor kinds with the
@@ -676,37 +716,124 @@ const ROCKS = {
 // as one family. Everything here is drawn at a position the simulation owns.
 
 Object.assign(Art, {
-  // A car or a truck, facing whichever way its lane runs.
-  car(ctx, x, y, T, w, kind, color, dir, night) {
-    const h = T * 0.62, half = w / 2;
+  // A vehicle, seen from above, facing whichever way its lane runs. Every
+  // body type fills exactly the span [x - w/2, x + w/2] -- the span the car
+  // hitbox is measured against -- so a tractor and a taxi are equally honest
+  // about where they can hit you. What varies is what is on top of the body.
+  car(ctx, x, y, T, w, kind, color, dir, night, style) {
+    const h = T * 0.62, half = w / 2, d = dir >= 0 ? 1 : -1;
+    style = style || (kind === "truck" ? "box" : "sedan");
     this.shadow(ctx, x, y + h * 0.46, w * 0.48, h * 0.22);
+    const front = x + d * half;                 // x of the leading edge
+    const at = (u) => x + d * (u - 0.5) * w;    // u: 0 = back, 1 = front
 
     if (kind === "truck") {
-      // cab + box, so a truck is a different SHAPE and not just a longer car
-      const cabW = w * 0.34, boxW = w - cabW - T * 0.03;
-      const cabX = dir >= 0 ? x + half - cabW : x - half;
-      const boxX = dir >= 0 ? x - half : x - half + cabW + T * 0.03;
-      this.solidRect(ctx, boxX, y - h / 2 + h * 0.06, boxW, h * 0.88, T * 0.05, GK.util.shade(color, -12));
-      // ribbing on the box
-      ctx.fillStyle = "rgba(0,0,0,0.10)";
-      for (let i = 1; i < 4; i++) ctx.fillRect(boxX + boxW * i / 4, y - h / 2 + h * 0.12, Math.max(1, T * 0.018), h * 0.74);
-      this.solidRect(ctx, cabX, y - h / 2, cabW, h, T * 0.07, color);
-      this.glass(ctx, cabX + cabW * (dir >= 0 ? 0.30 : 0.14), y - h * 0.30, cabW * 0.56, h * 0.34, T);
-    } else {
-      this.solidRect(ctx, x - half, y - h / 2, w, h, T * 0.10, color);
+      // cab + load, so a truck is a different SHAPE and not just a longer car
+      const cabW = w * 0.34, loadW = w - cabW - T * 0.03;
+      const cabX = d > 0 ? x + half - cabW : x - half;
+      const loadX = d > 0 ? x - half : x - half + cabW + T * 0.03;
+      if (style === "bus") {
+        this.solidRect(ctx, x - half, y - h / 2, w, h, T * 0.10, color);
+        ctx.fillStyle = "rgba(150,205,240,0.75)";
+        const n = 6, seg = (w - T * 0.5) / n;
+        for (let i = 0; i < n; i++) for (const yy of [y - h * 0.44, y + h * 0.30]) {
+          rr(ctx, x - half + T * 0.2 + i * seg, yy, seg - T * 0.05, h * 0.14, T * 0.02); ctx.fill();
+        }
+        this.glass(ctx, d > 0 ? front - T * 0.26 : front + T * 0.06, y - h * 0.32, T * 0.2, h * 0.64, T);
+        ctx.fillStyle = "rgba(255,255,255,0.22)";
+        for (const u of [0.3, 0.6]) { rr(ctx, at(u) - T * 0.12, y - h * 0.16, T * 0.24, h * 0.32, T * 0.04); ctx.fill(); }
+      } else {
+        if (style === "tanker") {
+          const tc = "#cfd6dc";
+          this.solidRect(ctx, loadX, y - h * 0.40, loadW, h * 0.80, h * 0.36, tc);
+          ctx.fillStyle = "rgba(255,255,255,0.35)"; rr(ctx, loadX + T * 0.08, y - h * 0.22, loadW - T * 0.16, h * 0.12, h * 0.06); ctx.fill();
+          ctx.fillStyle = "rgba(0,0,0,0.12)";
+          for (let i = 1; i < 4; i++) ctx.fillRect(loadX + loadW * i / 4, y - h * 0.38, Math.max(1, T * 0.02), h * 0.76);
+          ctx.fillStyle = color; rr(ctx, loadX + loadW * 0.3, y - h * 0.08, loadW * 0.4, h * 0.16, T * 0.03); ctx.fill();
+        } else if (style === "flatbed") {
+          this.solidRect(ctx, loadX, y - h * 0.44, loadW, h * 0.88, T * 0.04, "#8a8f96");
+          for (const [u, c] of [[0.2, "#c98f4a"], [0.55, "#b67a38"], [0.82, "#d9a35a"]]) {
+            const cw = loadW * 0.24;
+            this.solidRect(ctx, loadX + loadW * u - cw / 2, y - h * 0.3, cw, h * 0.6, T * 0.03, c);
+          }
+        } else if (style === "fire") {
+          this.solidRect(ctx, loadX, y - h / 2 + h * 0.04, loadW, h * 0.92, T * 0.05, color);
+          ctx.fillStyle = "#e9edf0";
+          for (const yy of [y - h * 0.22, y + h * 0.16]) ctx.fillRect(loadX + T * 0.08, yy, loadW - T * 0.16, Math.max(1.5, T * 0.035));
+          for (let i = 0; i < 8; i++) ctx.fillRect(loadX + T * 0.1 + i * (loadW - T * 0.2) / 7, y - h * 0.22, Math.max(1, T * 0.025), h * 0.4);
+        } else {                                  // box
+          this.solidRect(ctx, loadX, y - h / 2 + h * 0.06, loadW, h * 0.88, T * 0.05, GK.util.shade(color, -12));
+          ctx.fillStyle = "rgba(0,0,0,0.10)";
+          for (let i = 1; i < 4; i++) ctx.fillRect(loadX + loadW * i / 4, y - h / 2 + h * 0.12, Math.max(1, T * 0.018), h * 0.74);
+        }
+        this.solidRect(ctx, cabX, y - h / 2, cabW, h, T * 0.07, color);
+        this.glass(ctx, cabX + cabW * (d > 0 ? 0.30 : 0.14), y - h * 0.30, cabW * 0.56, h * 0.34, T);
+        if (style === "fire") { ctx.fillStyle = "#4a8fe8"; rr(ctx, cabX + cabW * 0.2, y - h * 0.08, cabW * 0.6, h * 0.16, T * 0.03); ctx.fill(); }
+      }
+    } else if (style === "beetle") {
+      this.solidRect(ctx, x - half, y - h / 2, w, h, h * 0.48, color);
+      this.glass(ctx, at(0.36) - (d < 0 ? w * 0.34 : 0), y - h * 0.26, w * 0.34, h * 0.52, T);
+    } else if (style === "tractor") {
+      // big back wheels poke out of the body, little front ones tucked in
+      ctx.fillStyle = "rgba(20,20,26,0.92)";
+      const wx = d > 0 ? x - half : x + half - w * 0.36;
+      for (const yy of [y - h * 0.56, y + h * 0.36]) { rr(ctx, wx, yy, w * 0.36, h * 0.2, T * 0.05); ctx.fill(); }
+      this.solidRect(ctx, x - half, y - h * 0.34, w, h * 0.68, T * 0.08, color);
+      ctx.fillStyle = "rgba(0,0,0,0.25)"; rr(ctx, wx + w * 0.03, y - h * 0.22, w * 0.3, h * 0.44, T * 0.04); ctx.fill();
+      ctx.fillStyle = "#333"; ctx.beginPath(); ctx.arc(at(0.72), y - h * 0.14, T * 0.05, 0, 7); ctx.fill();
+    } else if (style === "pickup") {
+      this.solidRect(ctx, x - half, y - h / 2, w, h, T * 0.08, color);
+      ctx.fillStyle = "rgba(0,0,0,0.30)";
+      rr(ctx, d > 0 ? x - half + T * 0.06 : x + half - T * 0.06 - w * 0.4, y - h * 0.34, w * 0.4, h * 0.68, T * 0.03); ctx.fill();
+      this.glass(ctx, d > 0 ? x - half + w * 0.52 : x + half - w * 0.52 - w * 0.24, y - h * 0.30, w * 0.24, h * 0.60, T);
+    } else if (style === "van" || style === "icecream") {
+      this.solidRect(ctx, x - half, y - h / 2, w, h, T * 0.08, color);
+      this.glass(ctx, d > 0 ? front - w * 0.2 : front + w * 0.03, y - h * 0.32, w * 0.17, h * 0.64, T);
+      ctx.fillStyle = "rgba(255,255,255,0.18)";
+      rr(ctx, d > 0 ? x - half + w * 0.08 : x + half - w * 0.63, y - h * 0.3, w * 0.55, h * 0.6, T * 0.05); ctx.fill();
+      if (style === "icecream") {
+        const cx = at(0.42);
+        ctx.fillStyle = "#e8b36a";
+        ctx.beginPath(); ctx.moveTo(cx - T * 0.08, y - h * 0.04); ctx.lineTo(cx + T * 0.08, y - h * 0.04); ctx.lineTo(cx, y + h * 0.3); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#ff9ec4"; ctx.beginPath(); ctx.arc(cx, y - h * 0.1, T * 0.1, 0, 7); ctx.fill();
+      }
+    } else if (style === "jeep") {
+      this.solidRect(ctx, x - half, y - h / 2, w, h, T * 0.05, color);
+      this.glass(ctx, at(0.62) - (d < 0 ? w * 0.1 : 0), y - h * 0.34, w * 0.1, h * 0.68, T);
+      ctx.fillStyle = "rgba(20,20,26,0.55)";
+      for (const u of [0.28, 0.45]) ctx.fillRect(at(u) - T * 0.02, y - h * 0.4, T * 0.04, h * 0.8);
+      ctx.fillStyle = "#26262e"; ctx.beginPath(); ctx.arc(x - d * (half - T * 0.1), y, T * 0.1, 0, 7); ctx.fill();
+    } else if (style === "plough") {
+      this.solidRect(ctx, x - half, y - h / 2, w, h, T * 0.08, color);
+      this.glass(ctx, at(0.45) - (d < 0 ? w * 0.26 : 0), y - h * 0.30, w * 0.26, h * 0.60, T);
+      ctx.fillStyle = "#f2c230";
+      ctx.beginPath(); ctx.moveTo(front, y - h * 0.5); ctx.lineTo(front - d * T * 0.12, y - h * 0.5);
+      ctx.lineTo(front - d * T * 0.06, y + h * 0.5); ctx.lineTo(front, y + h * 0.5); ctx.closePath(); ctx.fill();
+    } else {                                    // sedan, hatch, taxi
+      const hatch = style === "hatch";
+      this.solidRect(ctx, x - half, y - h / 2, w, h, T * (hatch ? 0.16 : 0.10), color);
       // cabin glass sits toward the front, which is the tell for direction
-      const gw = w * 0.46, gx = dir >= 0 ? x - half + w * 0.30 : x + half - w * 0.30 - gw;
-      this.glass(ctx, gx, y - h * 0.30, gw, h * 0.36, T);
+      const gw = w * (hatch ? 0.56 : 0.46), back = hatch ? 0.16 : 0.30;
+      const gx = d > 0 ? x - half + w * back : x + half - w * back - gw;
+      this.glass(ctx, gx, y - h * 0.30, gw, h * (hatch ? 0.6 : 0.36), T);
+      if (style === "taxi") {
+        this.solidRect(ctx, x - T * 0.1, y - h * 0.1, T * 0.2, h * 0.2, T * 0.03, "#fff6c8", 1);
+        ctx.fillStyle = "#26262e";
+        for (let i = 0; i < 4; i++) ctx.fillRect(x - half + T * 0.08 + i * (w - T * 0.16) / 4, y + h * 0.36, (w - T * 0.16) / 8, h * 0.06);
+      }
     }
 
     // wheels peeking below the body -- the cheapest thing that stops a car
     // reading as a floating lozenge
-    ctx.fillStyle = "rgba(20,20,26,0.9)";
-    for (const k of [-0.28, 0.28]) rr(ctx, x + w * k - T * 0.06, y + h * 0.34, T * 0.12, T * 0.11, T * 0.04), ctx.fill();
+    if (style !== "tractor") {
+      ctx.fillStyle = "rgba(20,20,26,0.9)";
+      const ks = kind === "truck" ? [-0.36, -0.14, 0.36] : [-0.28, 0.28];
+      for (const k of ks) { rr(ctx, x + d * w * k - T * 0.06, y + h * 0.34, T * 0.12, T * 0.11, T * 0.04); ctx.fill(); }
+    }
 
     // lights: white ahead, red behind
-    const fx = dir >= 0 ? x + half - T * 0.045 : x - half - T * 0.015;
-    const bx = dir >= 0 ? x - half - T * 0.015 : x + half - T * 0.045;
+    const fx = d > 0 ? x + half - T * 0.045 : x - half - T * 0.015;
+    const bx = d > 0 ? x - half - T * 0.015 : x + half - T * 0.045;
     ctx.fillStyle = "#fff6c8";
     rr(ctx, fx, y - h * 0.30, T * 0.06, T * 0.08, T * 0.02); ctx.fill();
     rr(ctx, fx, y + h * 0.18, T * 0.06, T * 0.08, T * 0.02); ctx.fill();
@@ -719,6 +846,90 @@ Object.assign(Art, {
       this.blob(ctx, x + dir * (half + T * 0.42), y, T * 0.70, T * 0.30, "rgba(255,240,190,0.9)");
       ctx.restore();
     }
+  },
+
+  // Which body a lane's vehicles have: one per lane, so a lane reads as one
+  // thing, picked from the world's own traffic by a hash of the row. Pure
+  // presentation -- the simulation only ever knows "car" or "truck".
+  vehicleStyle(row, lane, wi) {
+    const A = this.pal(wi), truck = lane.cars[0] && lane.cars[0].kind === "truck";
+    const list = truck ? A.trucks : A.cars;
+    if (!truck && GK.util.hash2(row, 71) < 0.05) return "icecream";
+    return list[Math.floor(GK.util.hash2(row, 73) * list.length) % list.length];
+  },
+  // Some bodies have their own colour -- a taxi is yellow, a fire engine red --
+  // and a character's theme may repaint the rest ("vehicle costumes").
+  vehicleColor(color, fx, style) {
+    if (style === "taxi") return "#f2c230";
+    if (style === "fire") return "#d9313a";
+    if (style === "icecream") return "#ffd8e6";
+    if (fx && fx.cars) return fx.cars[Math.max(0, CAR_COLORS.indexOf(color)) % fx.cars.length];
+    return color;
+  },
+
+  // Roadside details on the verge beyond the playfield -- never on a tile the
+  // bird can stand on, and small and quiet next to the traffic.
+  roadside(ctx, G, row, top, wi) {
+    const T = G.TILE, A = this.pal(wi);
+    for (const side of [-1, 1]) {
+      const h = GK.util.hash2(row * 3 + (side > 0 ? 1 : 0), 41);
+      if (h > 0.34) continue;
+      const kind = A.verge[Math.floor(GK.util.hash2(row, side > 0 ? 43 : 47) * A.verge.length) % A.verge.length];
+      const x = side < 0 ? G.X0 - T * 0.55 : G.W - G.X0 + T * 0.55, y = top + T * 0.5;
+      ROADSIDE[kind](ctx, x, y, T, A, G.night);
+    }
+  },
+
+  // One character particle, in screen space. `k` runs 1 -> 0 over its life.
+  fxParticle(ctx, p, k) {
+    const r = p.r * (0.7 + 0.3 * k);
+    ctx.globalAlpha = Math.min(1, k * 1.6) * 0.9;
+    const x = p.x, y = p.y;
+    switch (p.kind) {
+      case "streak":
+        ctx.strokeStyle = p.c; ctx.lineWidth = Math.max(1.5, r * 0.12); ctx.lineCap = "round";
+        ctx.beginPath();
+        if (p.vy) { ctx.moveTo(x, y); ctx.lineTo(x, y + r); } else { ctx.moveTo(x, y); ctx.lineTo(x - Math.sign(p.vx) * r, y); }
+        ctx.stroke(); break;
+      case "hearts": ctx.fillStyle = "#ff6f9a"; this.heart(ctx, x, y, r); break;
+      case "stars": ctx.fillStyle = "#ffd93b"; this.star(ctx, x, y, r * 1.2); break;
+      case "sparkle": case "glitter":
+        ctx.fillStyle = p.kind === "glitter" ? ["#ff9ad5", "#9ad9ff", "#fff3a0"][(p.rot * 10 | 0) % 3] : "#fff7c0";
+        ctx.beginPath(); ctx.moveTo(x, y - r * 1.3); ctx.lineTo(x + r * 0.35, y); ctx.lineTo(x, y + r * 1.3); ctx.lineTo(x - r * 0.35, y); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x - r * 1.3, y); ctx.lineTo(x, y + r * 0.35); ctx.lineTo(x + r * 1.3, y); ctx.lineTo(x, y - r * 0.35); ctx.closePath(); ctx.fill(); break;
+      case "notes":
+        ctx.fillStyle = "#3a3a52"; ctx.beginPath(); ctx.ellipse(x, y, r * 0.7, r * 0.5, -0.4, 0, 7); ctx.fill();
+        ctx.fillRect(x + r * 0.5, y - r * 1.8, Math.max(1, r * 0.22), r * 1.8); break;
+      case "bubbles":
+        ctx.strokeStyle = "#dff4ff"; ctx.lineWidth = Math.max(1, r * 0.2);
+        ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.stroke(); break;
+      case "leaves": case "petals":
+        ctx.fillStyle = p.kind === "leaves" ? "#d9822b" : "#ffb3d1";
+        ctx.save(); ctx.translate(x, y); ctx.rotate(p.rot + p.t * 5);
+        ctx.beginPath(); ctx.ellipse(0, 0, r * 1.1, r * 0.5, 0, 0, 7); ctx.fill(); ctx.restore(); break;
+      case "snow":
+        ctx.fillStyle = "#ffffff"; ctx.beginPath(); ctx.arc(x, y, r * 0.8, 0, 7); ctx.fill(); break;
+      case "embers":
+        ctx.fillStyle = "#ffa04a"; ctx.beginPath(); ctx.arc(x, y, r * 0.6, 0, 7); ctx.fill(); break;
+      case "confetti":
+        ctx.fillStyle = CONFETTI_COLORS[(p.rot * 10 | 0) % CONFETTI_COLORS.length];
+        ctx.save(); ctx.translate(x, y); ctx.rotate(p.rot + p.t * 8); ctx.fillRect(-r, -r * 0.4, r * 2, r * 0.8); ctx.restore(); break;
+      case "bolts":
+        ctx.strokeStyle = "#ffe14a"; ctx.lineWidth = Math.max(1.2, r * 0.3);
+        ctx.beginPath(); ctx.moveTo(x - r * 0.3, y - r); ctx.lineTo(x + r * 0.2, y - r * 0.1); ctx.lineTo(x - r * 0.2, y + r * 0.1); ctx.lineTo(x + r * 0.3, y + r); ctx.stroke(); break;
+      case "drops":
+        ctx.fillStyle = "#8fd3ff"; ctx.beginPath(); ctx.moveTo(x, y - r); ctx.quadraticCurveTo(x + r * 0.8, y + r * 0.4, x, y + r * 0.7);
+        ctx.quadraticCurveTo(x - r * 0.8, y + r * 0.4, x, y - r); ctx.fill(); break;
+      case "feathers":
+        ctx.fillStyle = "#ffffff"; ctx.save(); ctx.translate(x, y); ctx.rotate(p.rot + p.t * 3);
+        ctx.beginPath(); ctx.ellipse(0, 0, r * 1.2, r * 0.35, 0, 0, 7); ctx.fill(); ctx.restore(); break;
+      case "rainbow":
+        ctx.fillStyle = ["#e84a4a", "#f4a13a", "#f6d743", "#5cc46a", "#4a8fe8", "#8e5ae8"][(p.rot * 10 | 0) % 6];
+        ctx.beginPath(); ctx.arc(x, y, r * 0.7, 0, 7); ctx.fill(); break;
+      default:
+        ctx.fillStyle = "rgba(255,250,225,1)"; ctx.beginPath(); ctx.arc(x, y, r * 0.7, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
   },
 
   glass(ctx, x, y, w, h, T) {
@@ -1236,9 +1447,10 @@ Object.assign(Art, {
   // Motes: pollen, snow, embers, fireflies. A fixed pool, wrapped rather than
   // respawned, so nothing is ever allocated after the first frame.
   _motes: null,
-  motes(ctx, W, H, t, wi) {
+  motes(ctx, W, H, t, wi, fx) {
     if (!this.motion) return;
-    const m = this.pal(wi).mote;
+    // a character theme may bring its own weather: snow, petals, bubbles
+    const m = (fx && fx.mote) || this.pal(wi).mote;
     if (!m) return;
     if (!this._motes || this._motes.length < m.n) {
       this._motes = [];
@@ -1596,3 +1808,61 @@ Object.assign(Art, {
     this.bEye(ctx, P, 0.27 * s, -0.58 * s, 0.046 * s, false, st.dead);
   },
 });
+
+/* ------------------------------------------------------------- the verge */
+// Roadside details: things a road passes, drawn only beyond the playfield
+// (Art.roadside decides where). Small, one soft shadow, muted -- they tell you
+// where you are and must never be mistaken for traffic.
+const ROADSIDE = {
+  lamp(ctx, x, y, T, A, night) {
+    if (night) { ctx.save(); ctx.globalAlpha = 0.35; Art.blob(ctx, x, y + T * 0.1, T * 0.5, T * 0.3, "rgba(255,236,170,1)"); ctx.restore(); }
+    Art.shadow(ctx, x, y + T * 0.34, T * 0.08, T * 0.04, 0.6);
+    ctx.fillStyle = "#59606a"; rr(ctx, x - T * 0.025, y - T * 0.42, T * 0.05, T * 0.76, T * 0.02); ctx.fill();
+    ctx.fillStyle = night ? "#fff1b8" : "#dfe4e8"; rr(ctx, x - T * 0.09, y - T * 0.48, T * 0.18, T * 0.08, T * 0.03); ctx.fill();
+  },
+  sign(ctx, x, y, T) {
+    Art.shadow(ctx, x, y + T * 0.34, T * 0.08, T * 0.04, 0.6);
+    ctx.fillStyle = "#7a6a58"; ctx.fillRect(x - T * 0.02, y - T * 0.12, T * 0.04, T * 0.46);
+    ctx.fillStyle = "#f2c230"; ctx.beginPath(); ctx.moveTo(x, y - T * 0.38); ctx.lineTo(x + T * 0.16, y - T * 0.16);
+    ctx.lineTo(x, y + T * 0.06); ctx.lineTo(x - T * 0.16, y - T * 0.16); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#3a3a44"; ctx.fillRect(x - T * 0.015, y - T * 0.26, T * 0.03, T * 0.1);
+  },
+  hydrant(ctx, x, y, T) {
+    Art.shadow(ctx, x, y + T * 0.2, T * 0.09, T * 0.04, 0.6);
+    ctx.fillStyle = "#c9433a"; rr(ctx, x - T * 0.07, y - T * 0.08, T * 0.14, T * 0.28, T * 0.05); ctx.fill();
+    ctx.fillRect(x - T * 0.11, y + T * 0.0, T * 0.22, T * 0.06);
+  },
+  cone(ctx, x, y, T) {
+    Art.shadow(ctx, x, y + T * 0.18, T * 0.1, T * 0.04, 0.6);
+    ctx.fillStyle = "#f0843a"; ctx.beginPath(); ctx.moveTo(x - T * 0.1, y + T * 0.18); ctx.lineTo(x + T * 0.1, y + T * 0.18);
+    ctx.lineTo(x, y - T * 0.16); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(x - T * 0.055, y, T * 0.11, T * 0.04);
+  },
+  mailbox(ctx, x, y, T) {
+    Art.shadow(ctx, x, y + T * 0.3, T * 0.08, T * 0.04, 0.6);
+    ctx.fillStyle = "#7a5a3a"; ctx.fillRect(x - T * 0.02, y - T * 0.05, T * 0.04, T * 0.35);
+    ctx.fillStyle = "#4a7fc0"; rr(ctx, x - T * 0.11, y - T * 0.16, T * 0.22, T * 0.13, T * 0.05); ctx.fill();
+    ctx.fillStyle = "#e84a4a"; ctx.fillRect(x + T * 0.06, y - T * 0.24, T * 0.025, T * 0.09);
+  },
+  hay(ctx, x, y, T) {
+    Art.shadow(ctx, x, y + T * 0.2, T * 0.18, T * 0.05, 0.6);
+    ctx.fillStyle = "#e0bd5a"; rr(ctx, x - T * 0.17, y - T * 0.1, T * 0.34, T * 0.28, T * 0.06); ctx.fill();
+    ctx.fillStyle = "rgba(120,80,20,0.35)"; for (const u of [-0.06, 0.06]) ctx.fillRect(x + u * T, y - T * 0.1, T * 0.02, T * 0.28);
+  },
+  snowman(ctx, x, y, T) {
+    Art.shadow(ctx, x, y + T * 0.22, T * 0.12, T * 0.04, 0.6);
+    ctx.fillStyle = "#f7fbff"; ctx.beginPath(); ctx.arc(x, y + T * 0.08, T * 0.13, 0, 7); ctx.arc(x, y - T * 0.14, T * 0.09, 0, 7); ctx.fill();
+    ctx.fillStyle = "#f0843a"; ctx.fillRect(x, y - T * 0.15, T * 0.07, T * 0.025);
+  },
+  bench(ctx, x, y, T) {
+    Art.shadow(ctx, x, y + T * 0.18, T * 0.2, T * 0.04, 0.6);
+    ctx.fillStyle = "#8a6a44"; ctx.fillRect(x - T * 0.2, y - T * 0.02, T * 0.4, T * 0.06); ctx.fillRect(x - T * 0.2, y - T * 0.14, T * 0.4, T * 0.05);
+    ctx.fillStyle = "#4a4a52"; ctx.fillRect(x - T * 0.17, y + T * 0.04, T * 0.03, T * 0.12); ctx.fillRect(x + T * 0.14, y + T * 0.04, T * 0.03, T * 0.12);
+  },
+  palmSign(ctx, x, y, T) {
+    Art.shadow(ctx, x, y + T * 0.3, T * 0.08, T * 0.04, 0.6);
+    ctx.fillStyle = "#8d6e3f"; ctx.fillRect(x - T * 0.02, y - T * 0.1, T * 0.04, T * 0.4);
+    ctx.fillStyle = "#c98f4a"; rr(ctx, x - T * 0.15, y - T * 0.26, T * 0.3, T * 0.14, T * 0.03); ctx.fill();
+    ctx.fillStyle = "#4a3322"; ctx.fillRect(x - T * 0.1, y - T * 0.2, T * 0.2, T * 0.02);
+  },
+};

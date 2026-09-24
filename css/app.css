@@ -1,0 +1,161 @@
+/* Home, Hop In, the in-game HUD, the result card, the character collection
+   and the Prize Machine. Loaded under BOTH looks (css/style.css and
+   css/legacy.css), so every value falls back to a literal when the new look's
+   --cc-* tokens are not there. legacy.css styles every <canvas> as the full
+   screen playfield, which is why each canvas below resets position/inset. */
+
+/* ---------- the one big button ---------- */
+.btn small { display: block; font-size: 13px; font-weight: 700; opacity: .85; }
+.btn.hop-btn { flex-direction: column; gap: 0; font-size: 30px; padding: 16px 20px 14px;
+  min-height: 84px; border-radius: 22px; letter-spacing: .01em; }
+.btn.hop-btn small { font-size: 14px; margin-top: 2px; }
+.row-btns2 .btn { flex-direction: column; gap: 0; }
+
+/* ---------- home ---------- */
+.content.home { display: flex; flex-direction: column; align-items: stretch; gap: 12px; max-width: 460px; }
+.home-hero { align-self: center; background: none; border: none; padding: 0; cursor: pointer;
+  border-radius: 50%; touch-action: manipulation; }
+.home-hero canvas, .char-big, .cc-card canvas, .unlock-strip canvas {
+  position: static; inset: auto; margin: 0; background: none; display: block; touch-action: manipulation; }
+.home-hero canvas { width: 180px; height: 150px; }
+.home-name { align-self: center; background: rgba(255,255,255,.92); color: var(--cc-deep, #12232e);
+  border: none; border-radius: 999px; padding: 8px 16px; font: inherit; font-weight: 900; font-size: 17px;
+  cursor: pointer; box-shadow: 0 2px 0 rgba(0,0,0,.16); margin-top: -6px; }
+.home-name span { font-weight: 700; font-size: 13px; opacity: .6; margin-left: 4px; }
+.home-stats { display: flex; justify-content: center; gap: 18px; font-size: 16px;
+  font-variant-numeric: tabular-nums; text-shadow: 0 1px 0 rgba(0,0,0,.25); }
+.home-stats b { font-size: 22px; }
+.home-more .btn { font-size: 18px; min-height: 64px; }
+.prize-cta { background: #8e4fe9; color: #fff; box-shadow: 0 6px 0 #6230b0; font-size: 17px; }
+.prize-cta.ready { background: #ffb32b; color: #12232e; box-shadow: 0 6px 0 #d98e12;
+  animation: ctaglow 1.6s ease-in-out infinite; }
+@keyframes ctaglow { 50% { filter: brightness(1.1); transform: scale(1.02); } }
+.topbar-title { margin: 0 0 0 4px; font-size: 22px; font-weight: 900; }
+@media (max-height: 620px) {
+  .home-hero canvas { width: 120px; height: 100px; }
+  .btn.hop-btn { min-height: 66px; font-size: 25px; padding: 10px 16px; }
+  .content.home { gap: 8px; }
+}
+
+/* ---------- in-game HUD ---------- */
+/* Corners only: the middle of the top edge is where the next lanes arrive. */
+#gbar { align-items: flex-start; padding-left: calc(12px + env(safe-area-inset-left));
+  padding-right: calc(12px + env(safe-area-inset-right)); }
+#gbar .grow { flex: 1; }
+#gbar .hud-dist { display: flex; flex-direction: column; align-items: flex-start; line-height: 1;
+  color: #fff; font-variant-numeric: tabular-nums; pointer-events: none;
+  text-shadow: 0 2px 0 rgba(0,0,0,.45), 0 0 6px rgba(0,0,0,.25); }
+#gbar #g-progress { flex: none; width: auto; max-width: none; margin: 0; text-align: left;
+  font-size: 40px; font-weight: 900; letter-spacing: .01em; }
+#gbar #g-best { font-size: 13px; font-weight: 800; opacity: .9; margin-top: 3px; letter-spacing: .04em; }
+#gbar .pill { font-size: 17px; padding: 6px 12px; }
+#gbar .hud-pause { width: 40px; height: 40px; font-size: 18px; margin-left: 8px; opacity: .85; }
+@media (pointer: coarse) { #gbar .hud-pause { width: 46px; height: 46px; } }
+#g-progress.pop { animation: pillpop var(--t-mid, 210ms) var(--ease-pop, ease-out); }
+
+/* Banners and the stall warning live in the bottom third: ground already
+   crossed, never the lanes ahead. */
+.g-banner { position: fixed; left: 0; right: 0; bottom: 20%; display: flex; flex-direction: column;
+  align-items: center; pointer-events: none; opacity: 0; transform: translateY(12px) scale(.9);
+  transition: opacity 220ms, transform 260ms cubic-bezier(.34,1.5,.64,1); color: #fff; z-index: 5;
+  text-shadow: 0 3px 0 rgba(0,0,0,.35), 0 0 12px rgba(0,0,0,.25); }
+.g-banner.show { opacity: 1; transform: none; }
+.g-banner b { font-size: 34px; font-weight: 900; }
+.g-banner small { font-size: 16px; font-weight: 800; margin-top: 2px; }
+.g-banner.best b { font-size: 46px; color: #ffe066; letter-spacing: .04em; }
+.g-warn { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px);
+  background: rgba(20,30,40,.72); color: #fff; font-weight: 900; font-size: 17px; padding: 8px 16px;
+  border-radius: 999px; opacity: 0; transition: opacity 200ms, transform 200ms; pointer-events: none; white-space: nowrap; }
+.g-warn.show { opacity: 1; transform: translate(-50%, 0); }
+.g-warn.l2 { background: rgba(200,60,48,.9); animation: warnpulse .8s ease-in-out infinite; }
+@keyframes warnpulse { 50% { transform: translate(-50%, 0) scale(1.05); } }
+
+/* ---------- the result card ---------- */
+/* Sits high, so the spot where it happened is still visible below it. */
+.modal.result-modal { align-items: start; padding-top: max(7vh, env(safe-area-inset-top)); }
+.result-modal .sheet { text-align: center; max-width: 380px; }
+.res-why { font-weight: 800; font-size: 17px; margin: 0; opacity: .75; }
+.res-dist { font-size: 68px; font-weight: 900; line-height: 1; margin: 6px 0 0; font-variant-numeric: tabular-nums; }
+.res-dist small { display: block; font-size: 14px; font-weight: 800; opacity: .55; margin-top: 2px; }
+.res-best { font-weight: 900; margin: 6px 0; font-size: 16px; opacity: .8; }
+.res-best.new { opacity: 1; color: #b36b00; font-size: 20px; letter-spacing: .06em; animation: bestpop .5s cubic-bezier(.34,1.5,.64,1); }
+@keyframes bestpop { from { transform: scale(.4); opacity: 0; } }
+.res-coins { margin: 2px 0 12px; }
+.btn.res-again { font-size: 28px; min-height: 72px; margin-bottom: 12px; }
+.res-hint { font-size: 12px; opacity: .55; margin-top: 10px; }
+.unlock-strip { display: flex; align-items: center; gap: 6px; width: 100%; margin: 0 0 12px; padding: 6px 10px;
+  border: 2px solid #ffb32b; border-radius: 14px; background: #fff6df; color: #12232e; font: inherit;
+  cursor: pointer; text-align: left; }
+.unlock-strip canvas { width: 44px; height: 44px; flex: none; }
+.unlock-strip span { flex: 1; font-size: 15px; }
+
+/* ---------- character collection ---------- */
+.coll-title { display: flex; flex-direction: column; line-height: 1.1; margin-left: 4px; }
+.coll-title b { font-size: 20px; }
+.coll-title span { font-size: 13px; font-weight: 800; opacity: .85; font-variant-numeric: tabular-nums; }
+.coin-chip { background: rgba(0,0,0,.3); color: #fff; font-weight: 900; padding: 6px 12px; border-radius: 999px;
+  font-variant-numeric: tabular-nums; margin-right: 8px; }
+.content.coll { max-width: 760px; }
+.coll-tools { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0 10px;
+  background: linear-gradient(180deg, rgba(63,155,224,.95) 70%, rgba(63,155,224,0)); }
+.coll-tools input, .coll-tools select { font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 12px;
+  border: 2px solid rgba(255,255,255,.7); background: #fff; color: #12232e; min-height: 44px; }
+.coll-tools input { flex: 1 1 180px; }
+.coll-tools select { flex: 1 1 160px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; width: 100%; }
+.chips button { font: inherit; font-weight: 800; font-size: 14px; padding: 8px 14px; border-radius: 999px;
+  border: 2px solid rgba(255,255,255,.8); background: rgba(255,255,255,.2); color: #fff; cursor: pointer; min-height: 40px; }
+.chips button[aria-pressed="true"] { background: #fff; color: #12232e; }
+.coll-sec h3 { display: flex; justify-content: space-between; align-items: baseline; margin: 16px 2px 4px;
+  font-size: 18px; text-shadow: 0 1px 0 rgba(0,0,0,.25); }
+.coll-n { font-size: 14px; font-weight: 800; background: rgba(0,0,0,.25); padding: 2px 10px; border-radius: 999px;
+  font-variant-numeric: tabular-nums; }
+.coll-n.full { background: #43c65a; }
+.coll-blurb { margin: 0 2px 8px; font-size: 13px; opacity: .85; }
+.coll-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 8px; }
+.cc-card { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px 8px;
+  border: 3px solid transparent; border-radius: 14px; background: rgba(255,255,255,.92); color: #12232e;
+  font: inherit; cursor: pointer; min-height: 96px; }
+.cc-card.locked { background: rgba(255,255,255,.45); }
+.cc-card.current { border-color: #ffb32b; }
+.cc-card canvas { width: 64px; height: 64px; }
+.cc-card span { font-size: 11.5px; font-weight: 800; line-height: 1.15; text-align: center;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.cc-card i { position: absolute; font-style: normal; font-size: 12px; font-weight: 900; }
+.cc-new { top: 3px; left: 3px; background: #e8403a; color: #fff; padding: 1px 5px; border-radius: 6px; font-size: 10px !important; }
+.cc-fav { top: 3px; right: 6px; color: #e8406a; }
+.cc-how { top: 3px; right: 5px; opacity: .8; }
+.coll-empty { text-align: center; opacity: .9; margin: 30px 0; font-weight: 700; }
+
+.char-sheet, .prize-sheet { text-align: center; max-width: 360px; }
+.char-big { width: 180px; height: 160px; margin: 0 auto !important; }
+.char-big.pop { animation: bestpop .6s cubic-bezier(.34,1.5,.64,1); }
+.char-meta { font-size: 14px; }
+.char-how { background: #f0f3f6; border-radius: 12px; padding: 10px 12px; font-weight: 700; margin: 10px 0 14px !important; opacity: 1 !important; }
+.char-how.owned { background: #e4f7e8; color: #1a6b3a; }
+.char-sheet .btn, .prize-sheet .btn { margin-top: 8px; }
+
+/* ---------- the Prize Machine ---------- */
+.machine { position: relative; width: 170px; height: 190px; margin: 6px auto 4px; }
+.machine .dome { position: absolute; left: 15px; top: 0; width: 140px; height: 120px; border-radius: 70px 70px 20px 20px;
+  background: radial-gradient(circle at 35% 30%, #ffffffd0, #bfe6ff90 40%, #6fb8e8a0); border: 4px solid #2670ab; overflow: hidden; }
+.machine .dome i { position: absolute; width: 30px; height: 30px; border-radius: 50%;
+  left: calc(8px + (var(--i) * 37px) % 110px); top: calc(56px + (var(--i) * 13px) % 44px);
+  background: hsl(calc(var(--i) * 40deg) 80% 62%); box-shadow: inset -4px -4px 0 rgba(0,0,0,.15); }
+.machine .base { position: absolute; left: 25px; top: 112px; width: 120px; height: 72px; border-radius: 10px 10px 14px 14px;
+  background: #e8403a; box-shadow: inset 0 -8px 0 rgba(0,0,0,.18); }
+.machine .slot { position: absolute; left: 40px; top: 30px; width: 40px; height: 28px; border-radius: 8px; background: #7a1f1a; }
+.machine .capsule { position: absolute; left: 70px; top: 60px; width: 30px; height: 30px; border-radius: 50%;
+  background: linear-gradient(180deg, #ffd23f 50%, #fff 50%); opacity: 0; }
+.machine.turning .dome i { animation: shake .25s linear 3; }
+.machine.turning .capsule { animation: drop .9s cubic-bezier(.5,0,.5,1.3) forwards; }
+@keyframes shake { 50% { transform: translate(3px, -3px) rotate(8deg); } }
+@keyframes drop { 0% { opacity: 1; top: 60px; } 60% { top: 150px; } 100% { opacity: 1; top: 142px; } }
+.prize-odds { font-size: 13px; }
+.prize-coins { font-size: 18px; }
+.prize-msg { color: #c0463d; font-weight: 800; }
+.prize-new { font-weight: 900; color: #8e4fe9; font-size: 18px; margin: 0 !important; opacity: 1 !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .prize-cta.ready, .g-warn.l2 { animation: none; }
+}

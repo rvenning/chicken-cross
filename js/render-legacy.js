@@ -50,7 +50,8 @@ const LEGACY_DRAW = {
     ctx.save();
     if (this.shake>0 && Art.motion){ const s=this.shake*10; ctx.translate((Math.random()-0.5)*s,(Math.random()-0.5)*s); }
     ctx.clearRect(-20,-20,this.W+40,this.H+40);
-    ctx.fillStyle=this.theme.bg; ctx.fillRect(-20,-20,this.W+40,this.H+40);
+    this.sceneWorld();
+    ctx.fillStyle=this.sceneTheme.bg; ctx.fillRect(-20,-20,this.W+40,this.H+40);
 
     const lo=Math.floor(this.camRow-(this.H*(1-this.BASE_Y))/TILE)-2;
     const hi=Math.ceil(this.camRow+(this.H*this.BASE_Y)/TILE)+2;
@@ -79,7 +80,8 @@ const LEGACY_DRAW = {
   // collision -- a lying overlay would be worse than none.
 
   drawLane(row, lane) {
-    const ctx=this.ctx, TILE=this.TILE, th=this.theme;
+    // an endless run wears a different world every few dozen rows
+    const ctx=this.ctx, TILE=this.TILE, th=Art.themeOf(Art.laneWorld(lane, this.params && this.params.wi), lane && lane.blend);
     const [,cy]=this.screen(0,row), top=cy-TILE/2;
     if (row<0 || !lane){ ctx.fillStyle="#2a6db0"; ctx.fillRect(0,top,this.W,TILE+1); return; }
 
@@ -138,7 +140,8 @@ const LEGACY_DRAW = {
 
   drawWater(lane,row,top) {
     const ctx=this.ctx, T=this.TILE, W=this.W, t=this.elapsed;
-    ctx.fillStyle=(row%2===0)?this.theme.water:shade(this.theme.water,-8);
+    const wt=Art.themeOf(Art.laneWorld(lane, this.params && this.params.wi)).water;
+    ctx.fillStyle=(row%2===0)?wt:shade(wt,-8);
     ctx.fillRect(0,top,W,T+1);
     // depth: darker along the top bank, lighter in the shallows below
     ctx.fillStyle="rgba(0,0,20,0.10)"; ctx.fillRect(0,top,W,T*0.18);
@@ -247,7 +250,9 @@ const LEGACY_DRAW = {
 
   drawChick() {
     const ctx=this.ctx, T=this.TILE, c=this.chick;
-    const sk = LEGACY_SKINS[this.bird()] || LEGACY_SKINS["🐔"];
+    // The classic look only ever had the founding twelve; every other
+    // character is drawn by its modern painter, at the classic size.
+    const emoji = this.bird(), sk = emoji ? LEGACY_SKINS[emoji] : null;
     let [x,yBase]=this.screen(c.col,c.row);
     // riding a log: bob with the lane so bird and log move as one
     const under=this.world[c.row];
@@ -297,7 +302,8 @@ const LEGACY_DRAW = {
     // bird. Rosalie's note -- "the flamingo just looks like a pink chicken" --
     // was exactly right: what makes a flamingo is the silhouette, not the
     // colour, so it gets its own painter instead of another colour flag.
-    if (sk.plan==="flamingo") this.paintFlamingo(s,sk);
+    if (!sk) Art.character(ctx, s, this.character(), { dead:this.dead, idle:this.elapsed-this._movedAt });
+    else if (sk.plan==="flamingo") this.paintFlamingo(s,sk);
     else this.paintBird(s,sk);
     ctx.restore();
     // ripples last, so they spread across the surface the bird went under

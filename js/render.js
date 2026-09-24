@@ -9,11 +9,17 @@
 
 Object.assign(Game, {
 
-  // The bird the player chose in Settings, or the one matching their profile
-  // avatar if they never chose. Read from the progress the level loaded, so
-  // the renderer never touches storage per frame.
+  // The character the player chose (progress.char, migrated from the old
+  // per-bird setting). Read from the progress the level loaded, so the
+  // renderer never touches storage per frame.
+  character() {
+    return Roster.get(this.progress && this.progress.char);
+  },
+  // The founding bird's emoji, for the classic renderer, which only ever had
+  // those twelve -- or null for anyone else.
   bird() {
-    return (this.progress && this.progress.bird) || (this.profile && this.profile.avatar) || "🐔";
+    const ch = this.character();
+    return ch.unlock.type === "founding" ? ch.unlock.emoji : null;
   },
 
   // Players who ask their OS for less movement get a world that holds still:
@@ -67,10 +73,12 @@ Object.assign(Game, {
   // 2D or 3D. Saved per player like the look; the 3D renderer is fetched the
   // first time it is asked for, and the 2D one draws until it is ready.
   view: "2d",
-  setView(view) {
+  // quiet: this is the default rather than the player's choice, so if the
+  // device cannot do 3D, fall back to 2D without saying anything.
+  setView(view, quiet) {
     this.view = view === "3d" ? "3d" : "2d";
-    if (this.view === "3d") R3.load();
-    else { R3.hide(); if (this.canvas && this.theme) this.canvas.style.background = this.theme.bg; }
+    if (this.view === "3d") R3.load(quiet);
+    else { R3.hide(); this._bg = null; if (this.canvas && this.theme) this.canvas.style.background = (this.sceneTheme || this.theme).bg; }
     if (this.canvas) this.resize();
   },
 
@@ -78,7 +86,7 @@ Object.assign(Game, {
     if (this.view === "3d" && R3.ready) R3.frame();
     else {
       R3.hide();
-      if (this.canvas.style.background === "transparent" && this.theme) this.canvas.style.background = this.theme.bg;
+      if (this.canvas.style.background === "transparent" && this.theme) { this._bg = null; this.canvas.style.background = (this.sceneTheme || this.theme).bg; }
       this.render();
     }
   },
@@ -143,11 +151,14 @@ Object.assign(Game, {
   },
 
 
+  // Distance big in the top-left corner, the best (or the level goal) small
+  // under it, coins top-right. Nothing else while playing.
   updateHud() {
-    const prog = document.getElementById("g-progress");
-    const dist = this.mode==="level" ? `${this.chick.maxRow} / ${this.target}`
-                                     : `${this.chick.maxRow} m`;
-    this.setPill(prog, dist);
+    const c = this.chick, level = this.mode === "level";
+    this.setPill(document.getElementById("g-progress"), String(c.maxRow));
+    const best = Math.max(this.startBest || 0, c.maxRow);
+    const sub = document.getElementById("g-best");
+    if (sub) sub.textContent = level ? `GOAL ${this.target}` : `BEST ${best}`;
     this.setPill(document.getElementById("g-coins"),
                  "🪙 " + (this.progress ? this.progress.coins : 0));
   },
@@ -228,37 +239,64 @@ Object.assign(Game, {
 
 
 
+  // The hop, frame by frame. Collision timing is the engine's (HOP_TIME, and
+  // the bird is where c.col/c.row say throughout); everything here is how it
+  // LOOKS on the way: a crouch as it pushes off, a taller arc, a stretch at
+  // the top, a squash as it lands, and the body turned the way it went.
+  hopPose(c) {
+    const M = Art.motion;
+    let lift = 0, sx = 1, sy = 1, tilt = 0;
+    if (c.hop < 1) {
+      const k = c.hop;
+      lift = Math.sin(Math.PI*k) * 0.5;
+      if (M) {
+        // crouch-and-spring in the first fifth, then ease out of the stretch
+        sy = k < 0.2 ? 0.8 + 0.38*(k/0.2) : 1.18 - 0.18*((k-0.2)/0.8);
+        sx = 1 - (sy-1)*0.6;
+        tilt = Math.sin(Math.PI*k) * 0.10;
+      }
+    } else if (M && this._landT > 0) {
+      const u = 1 - this._landT;               // 0..1 across the landing squash
+      const q = Math.sin(Math.PI*u);
+      sy = 1 - 0.17*q; sx = 1 + 0.13*q;
+    }
+    return { lift, sx, sy, tilt };
+  },
+
   drawChick() {
     const ctx=this.ctx, T=this.TILE, c=this.chick;
-    const sk = SKINS[this.bird()] || SKINS["🐔"];
+    const ch = this.character();
     let [x,yBase]=this.screen(c.col,c.row);
     // riding a log: bob with the lane so bird and log move as one
-    const under=this.world[c.row];
+    const under=this.world[Math.round(c.row)];
     if (under && under.type==="water" && c.hop>=1 && !this.dead) yBase += this.waterBob(c.row);
-    const arc = c.hop<1 ? Math.sin(Math.PI*c.hop) : 0;
-    let y = yBase - arc*T*0.42, sx=1, sy=1;
-    if (c.hop<1){ sy=1+arc*0.18; sx=1-arc*0.12; }
-    // Water deaths used to play the road-squash flatten, which read as being run
-    // over by the river. Drowning sinks instead: the bird drops below the
-    // surface, shrinks with the depth and fades out, leaving ripples behind.
-    // "fell" covers both being swept off a log and being left behind by the
-    // camera, so check the lane rather than the reason -- falling behind on a
-    // road should still squash, not sink into the tarmac.
+    const pose = this.hopPose(c);
+    let y = yBase - pose.lift*T, sx=pose.sx, sy=pose.sy, rot=pose.tilt*this._face, dx=0;
+    // Four deaths, four pictures. Water sinks (and was already its own thing);
+    // a car flattens; a train flings the bird off down the line, spinning; the
+    // push tumbles it off the bottom of the screen. "fell" covers both being
+    // swept off a log and the push, so check the lane rather than the reason.
     const drown = this.dead && (this.deathReason==="water" ||
       (this.deathReason==="fell" && under && under.type==="water"));
+    const fling = this.dead && this.deathReason==="train";
+    const tumble = this.dead && this.deathReason==="fell" && !drown;
     let t=0;
     if (this.dead){
-      t=Math.min(1,(performance.now()-(this._deadAt||(this._deadAt=performance.now())))/(drown?600:300));
+      t=Math.min(1,(performance.now()-(this._deadAt||(this._deadAt=performance.now())))/(drown?600:fling?700:tumble?600:300));
       if (drown){ const k=1-t*0.45; sx=k; sy=k; y=yBase+t*T*0.5; }
-      else { sy=1-t*0.7; sx=1+t*0.5; y=yBase; }
+      else if (fling){ const dir=(this.deathInfo&&this.deathInfo.dir)||1;
+        dx = dir*t*T*5; y = yBase - Math.sin(Math.PI*Math.min(1,t*1.2))*T*1.1; rot = dir*t*9*Art.motion; sx=sy=1-t*0.3; }
+      else if (tumble){ y = yBase + t*t*T*2.4; rot = t*5*Art.motion*this._face; }
+      else { sy=1-t*0.7; sx=1+t*0.5; y=yBase; rot=0; }
     }
     if (!this.dead) this._deadAt=0;
     const s=T*0.5;
-    // shadow -- nothing to cast one onto once the bird is under the surface
-    if (!drown){
-      Art.shadow(ctx, x, yBase+s*0.40, s*0.44*(1+arc*0.15), s*0.19, 0.85 - arc*0.25);
+    // shadow -- nothing to cast one onto once the bird is under the surface or
+    // has left the ground for good
+    if (!drown && !fling){
+      Art.shadow(ctx, x, yBase+s*0.40, s*0.44*(1+pose.lift*0.3), s*0.19, 0.85 - pose.lift*0.5);
     }
-    if (!drown){
+    if (!drown && !this.dead){
       ctx.save(); ctx.globalAlpha = 0.20;
       Art.blob(ctx, x, yBase+s*0.10, s*1.15, s*0.78, "rgba(255,246,200,1)");
       ctx.restore();
@@ -278,10 +316,14 @@ Object.assign(Game, {
     let lx=0, ly=0;
     if (this.bumpT>0 && !this.dead){ const l=Math.sin(Math.PI*(1-this.bumpT))*T*0.15;
       lx=this.bumpX*l; ly=-this.bumpY*l; }
-    ctx.save(); ctx.translate(x+lx,y+ly); ctx.scale(sx,sy);
+    ctx.save(); ctx.translate(x+lx+dx,y+ly);
+    // Squash and stretch pivot on the feet, so a crouch sinks into the ground
+    // instead of shrinking toward the middle of the bird.
+    ctx.translate(0, s*0.46); ctx.rotate(rot); ctx.scale(sx*this._face, sy); ctx.translate(0, -s*0.46);
     // sinking below the surface: hold full opacity for the first moments so the
     // drop is legible, then fade the bird out as the water closes over it
     if (drown) ctx.globalAlpha = Math.max(0, 1 - Math.max(0, t-0.3)/0.7);
+    if (fling || tumble) ctx.globalAlpha = Math.max(0, 1 - Math.max(0, t-0.5)/0.5);
     // Idle timer, presentation-only: the flamingo tucks a leg up once it has
     // been standing still for a moment. Derived from hop here in the renderer
     // rather than tracked in the engine, so the bots never see it.
@@ -289,19 +331,11 @@ Object.assign(Game, {
     // one reads as time travel -- treat a clock that went backwards as a reset.
     if (this._movedAt===undefined || this._movedAt>this.elapsed || c.hop<1 || this.dead)
       this._movedAt=this.elapsed;
-    // Skins with their own body plan paint themselves; the rest share the stock
-    // bird. Rosalie's note -- "the flamingo just looks like a pink chicken" --
-    // was exactly right: what makes a flamingo is the silhouette, not the
-    // colour, so it gets its own painter instead of another colour flag.
-    Art.bird(ctx, s, sk, { dead:this.dead, idle:this.elapsed-this._movedAt });
+    Art.character(ctx, s, ch, { dead:this.dead && !fling && !tumble ? true : this.dead, idle:this.elapsed-this._movedAt });
     ctx.restore();
     // ripples last, so they spread across the surface the bird went under
     if (drown) this.drawRipples(x, yBase, t);
   },
-
-
-
-
 
 
   // Three rings staggered in time, each expanding and thinning as it fades --
@@ -324,14 +358,13 @@ Object.assign(Game, {
     const ctx=this.ctx, TILE=this.TILE;
     // Which world's art to use. params.wi is presentation-only data the
     // simulation never reads; endless mode carries one too.
-    this.wi = (this.params && this.params.wi) || 0;
-    this.night = !!Art.pal(this.wi).night;
-    Art.ensure(this.wi, this.theme, this.W, TILE, this.DPR);
+    this.sceneWorld();
+    Art.ensure(this.W, TILE, this.DPR);
 
     ctx.save();
     if (this.shake>0 && Art.motion){ const s=this.shake*10; ctx.translate((Math.random()-0.5)*s,(Math.random()-0.5)*s); }
     ctx.clearRect(-20,-20,this.W+40,this.H+40);
-    ctx.fillStyle=this.theme.bg; ctx.fillRect(-20,-20,this.W+40,this.H+40);
+    ctx.fillStyle=this.sceneTheme.bg; ctx.fillRect(-20,-20,this.W+40,this.H+40);
 
     const lo=Math.floor(this.camRow-(this.H*(1-this.BASE_Y))/TILE)-2;
     const hi=Math.ceil(this.camRow+(this.H*this.BASE_Y)/TILE)+2;
@@ -345,7 +378,7 @@ Object.assign(Game, {
     // depth a camera that just scrolls can buy, and both are drawn over the
     // lanes but under the edge darkening so they read as being in the world.
     Art.cloudShadow(ctx, this.W, this.H, this.elapsed);
-    Art.motes(ctx, this.W, this.H, this.elapsed, this.wi);
+    Art.motes(ctx, this.W, this.H, this.elapsed, this.wi, this.themeFx);
 
     // darken the world beyond the playfield edges (Crossy-Road style). This is
     // a surround vignette, never over the playfield -- shading the ground the
@@ -362,8 +395,23 @@ Object.assign(Game, {
     ctx.restore();
     // Win confetti sits in screen space, outside the shake transform, so the
     // celebration doesn't judder along with the world.
+    this.drawOverlayFx(ctx);
     GK.Fx.render(ctx);
     this.drawDebug(ctx);
+  },
+
+  // The world the camera is standing in: its sky colour, its motes, and
+  // whether it is night. Campaign levels have one; an endless run moves
+  // through them, so this follows the lane at the camera row.
+  sceneWorld() {
+    const lane = this.world && this.world[Math.max(0, Math.round(this.camRow))];
+    this.wi = Art.laneWorld(lane, this.params && this.params.wi);
+    this.night = !!Art.pal(this.wi).night;
+    this.sceneTheme = this.mode === "endless" ? Art.themeOf(this.wi) : this.theme;
+    const bg = this.sceneTheme.bg;
+    if (this.view !== "3d" && this._bg !== bg && this.canvas.style.background !== "transparent") {
+      this._bg = bg; this.canvas.style.background = bg;
+    }
   },
 
   drawLane(row, lane) {
@@ -373,13 +421,15 @@ Object.assign(Game, {
     // the world has an EDGE rather than a colour change -- and it still moves,
     // because a dead flat slab is the one thing that reads as unfinished.
     if (row<0 || !lane){
-      Art.ground(ctx, "water", row, top, W, T);
+      Art.ground(ctx, "water", row, top, W, T, this.params ? this.params.wi : 0);
       ctx.fillStyle="rgba(0,10,30,0.34)"; ctx.fillRect(0,top,W,T+2);
       Art.waterShimmer(ctx,W,top,T,this.elapsed,-T*0.5,row);
       return;
     }
 
-    Art.ground(ctx, lane.type, row, top, W, T);
+    const wi = Art.laneWorld(lane, this.params && this.params.wi);
+    const night = !!Art.pal(wi).night;
+    Art.ground(ctx, lane.type, row, top, W, T, wi, lane.blend);
 
     if (lane.type==="grass") {
       // Planting beyond the playfield, drawn with the same painter as the real
@@ -388,16 +438,20 @@ Object.assign(Game, {
       const ext = Math.ceil(this.X0/T);
       for (let i=1;i<=ext;i++) for (const col of [-i, COLS-1+i]) {
         const h = hash2(row,col);
-        if (h < 0.55) { const [x,y]=this.screen(col,row); Art.obstacle(ctx,x,y,T,this.wi,h<0.12,row*97+col); }
+        if (h < 0.55) { const [x,y]=this.screen(col,row); Art.obstacle(ctx,x,y,T,wi,h<0.12,row*97+col); }
       }
       for (const col of lane.trees){
         const [x,y]=this.screen(col,row);
-        Art.obstacle(ctx,x,y,T,this.wi,(col*7+row)%3===0,row*97+col);
+        Art.obstacle(ctx,x,y,T,wi,(col*7+row)%3===0,row*97+col);
       }
     } else if (lane.type==="road") {
+      // Roadside details live only beyond the playfield, flat on the verge.
+      if (this.X0 > T*0.6) Art.roadside(ctx, this, row, top, wi);
+      const style = Art.vehicleStyle(row, lane, wi);
+      const color = Art.vehicleColor(lane.color, this.themeFx, style);
       for (const car of lane.cars){
         const [x,y]=this.screen(car.x,row);
-        Art.car(ctx,x,y,T,car.width*T*0.9,car.kind,lane.color,lane.dir,this.night);
+        Art.car(ctx,x,y,T,car.width*T*0.9,car.kind,color,lane.dir,night,style);
       }
     } else if (lane.type==="water") {
       Art.waterShimmer(ctx,W,top,T,this.elapsed,lane.dir*lane.speed*T,row);
@@ -478,6 +532,7 @@ Object.assign(Game, {
   // presentation bug to move a bird.
 
   _puffs: [],
+  _face: 1, _landT: 0,
   _prevHop: 1,
   _prevCoins: 0,
   _danger: 0,
@@ -485,32 +540,179 @@ Object.assign(Game, {
   juice(dt) {
     const c = this.chick;
     if (!c) return;
+    const M = Art.motion;
 
-    // a hop that just finished -> dust where the feet landed
+    // take-off: turn to face the way the hop goes (left/right only -- the
+    // side-on bird has no "up" pose, and a forward hop keeps its facing)
+    if (this._prevHop >= 1 && c.hop < 1) {
+      const dc = c.toCol - c.fromCol;
+      if (Math.abs(dc) > 0.3) this._face = dc > 0 ? 1 : -1;
+    }
+    // a hop that just finished -> dust where the feet landed, a small landing
+    // squash, and the character's own hop particle
     if (this._prevHop < 1 && c.hop >= 1 && !this.dead) {
       const lane = this.world[c.row];
       this.puff(c.col, c.row, lane && lane.type);
+      this._landT = 1;
+      this.charFx(c.col, c.row);
     }
+    if (this.bumpT > 0.9 && this.bumpX) this._face = this.bumpX > 0 ? 1 : -1;
     this._prevHop = c.hop;
+    this._landT = Math.max(0, this._landT - dt / 0.12);
 
-    // the counter went up -> a ghost of the coin, rising and fading. Taking a
-    // coin always happens on the chick's own tile, so that is where it goes.
-    if (this.runCoins > this._prevCoins) this.puff(c.col, c.row, "coin");
-    this._prevCoins = this.runCoins;
+    // What the simulation reported this frame.
+    const ev = this.events || [];
+    while (ev.length) this.onEvent(ev.shift());
 
     // How close the camera is to taking us: 0 while there is room, 1 at the
     // edge. A read, not a rule -- camBottomRow() is the same function the
-    // engine kills on.
+    // engine kills on. In endless the anti-stall warning feeds it too.
     const margin = c.row - this.camBottomRow();
-    const want = this.dead ? 0 : Math.max(0, Math.min(1, (2.2 - margin) / 2.2));
+    let want = this.dead ? 0 : Math.max(0, Math.min(1, (2.2 - margin) / 2.2));
+    const stall = this.stallLevel ? this.stallLevel() : 0;
+    if (stall) want = Math.max(want, 0.35 + 0.35 * this.stallProgress() + (stall === 2 ? 0.3 : 0));
     this._danger += (want - this._danger) * Math.min(1, dt * 6);
+    this.setWarn(stall);
 
     for (let i = this._puffs.length - 1; i >= 0; i--) {
       const p = this._puffs[i];
       p.t += dt;
       if (p.t >= p.life) this._puffs.splice(i, 1);
     }
+    for (let i = this._cfx.length - 1; i >= 0; i--) {
+      const p = this._cfx[i];
+      p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += p.g * dt;
+      if (p.t >= p.life) this._cfx.splice(i, 1);
+    }
+    for (let i = this._flyers.length - 1; i >= 0; i--) {
+      const f = this._flyers[i];
+      f.t += dt / 0.55;
+      if (f.t >= 1) { this._flyers.splice(i, 1); this.popCoins(); }
+    }
+    this._closeT = Math.max(0, this._closeT - dt);
+    if (!M) { this._cfx.length = 0; this._flyers.length = 0; }
   },
+
+  // Screen position of a point in the world, in either view: the 3D camera
+  // projects it, the flat one is screen(). `lift` is in tiles, up.
+  toScreen(col, row, lift) {
+    if (this.view === "3d" && R3.ready && R3.camera) return R3.project(col, row, lift || 0);
+    const [x, y] = this.screen(col, row);
+    return [x, y - (lift || 0) * this.TILE];
+  },
+
+  onEvent(e) {
+    const M = Art.motion, T = this.TILE;
+    if (e.type === "coin") {
+      this.puff(e.col, e.row, "coin");
+      const [x, y] = this.toScreen(e.col, e.row, 0.5);
+      if (M) {
+        GK.Fx.sparkle(x, y, "#fff3a0", 7);
+        this._flyers.push({ x0: x, y0: y, t: 0 });
+      } else this.popCoins();
+      GK.Fx.text(x + T * 0.3, y - T * 0.2, "+1", { color: "#ffe066", size: Math.max(15, T * 0.34), dy: -T * 0.6, life: 0.7 });
+    } else if (e.type === "close") {
+      // A close call: a word, a whoosh and two streaks behind the bird. Kept
+      // small and off the lane ahead -- it is a pat on the back, not a flash.
+      if (this._closeT > 0) return;
+      this._closeT = 0.9;
+      const [x, y] = this.toScreen(e.col, e.row, 0.9);
+      GK.Fx.text(x, y, pick(["Phew!", "Close!", "Whew!", "Zoom!"]), { color: "#ffffff", size: Math.max(14, T * 0.3), dy: -T * 0.35, life: 0.75 });
+      if (M) for (const d of [-1, 1]) this._cfx.push({ kind: "streak", x: x + d * T * 0.45, y: y + T * 0.55, vx: d * T * 1.2, vy: 0, g: 0, t: 0, life: 0.3, r: T * 0.3, c: "#ffffff" });
+      Sfx.whoosh();
+    } else if (e.type === "milestone") {
+      this.banner(`${e.n} rows!`, e.bonus ? `+${e.bonus} 🪙 bonus` : "", "mile");
+      Sfx.milestone();
+      if (M) { const [x, y] = this.toScreen(this.chick.col, this.chick.row, 0.5); GK.Fx.burst(x, y, "#ffd93b", 10, 180, 0.6, 3); }
+    } else if (e.type === "newBest") {
+      this.banner("NEW BEST!", `Beat ${this.startBest} rows`, "best");
+      Sfx.fanfare();
+      if (M) {
+        const [x, y] = this.toScreen(this.chick.col, this.chick.row, 0.5);
+        for (const col of ["#ffd93b", "#ff9f43", "#4fc3f7", "#c77dff"]) GK.Fx.burst(x, y, col, 6, 240, 0.8, 3.5);
+      }
+    } else if (e.type === "death") {
+      const [x, y] = this.toScreen(e.col, e.row, 0.35), body = this.character().pal.body || "#ffffff";
+      if (e.reason === "car") { if (M) { GK.Fx.burst(x, y, body, 14, 160, 0.7, 3.2); GK.Fx.burst(x, y, "#ffffff", 5, 120, 0.5, 2); } }
+      else if (e.reason === "train") {
+        if (M) { GK.Fx.burst(x, y, body, 18, 260, 0.8, 3.6); GK.Fx.burst(x, y, "#ffe066", 8, 200, 0.5, 2.5); GK.Fx.addFlash(0.18); }
+        Sfx.crash();
+      }
+      else if (e.reason === "water") { if (M) GK.Fx.splash(x, y + T * 0.2, "#bfe8ff", 14); }
+      else if (M) { GK.Fx.dust(x, y, 8); for (let i = 0; i < 4; i++) this._cfx.push({ kind: "streak", x: x + (i - 1.5) * T * 0.3, y: y + T * 0.4, vx: 0, vy: -T * 3, g: 0, t: 0, life: 0.4, r: T * 0.45, c: "#e8f4ff" }); }
+    }
+  },
+
+  // The coin pill does its pop when the flying coin arrives, not before.
+  popCoins() {
+    const el = document.getElementById("g-coins");
+    if (!el || !Art.motion) return;
+    el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop");
+  },
+
+  // Big words in the lower half of the screen -- over ground already crossed,
+  // never over the lanes coming up.
+  banner(text, sub, kind) {
+    const el = document.getElementById("g-banner");
+    if (!el) return;
+    el.className = "g-banner " + kind;
+    el.innerHTML = `<b>${esc(text)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}`;
+    void el.offsetWidth;
+    el.classList.add("show");
+    clearTimeout(this._bannerT);
+    this._bannerT = setTimeout(() => el.classList.remove("show"), kind === "best" ? 1800 : 1300);
+  },
+
+  // The anti-stall warning: a chip at the bottom edge, never over the road.
+  setWarn(level) {
+    if (level === this._warnLevel) return;
+    this._warnLevel = level;
+    const el = document.getElementById("g-warn");
+    if (!el) return;
+    el.className = "g-warn" + (level ? " show l" + level : "");
+    el.textContent = level === 2 ? "💨 The breeze is pushing you — hop!" : level === 1 ? "⬆ Keep hopping!" : "";
+    if (level === 1) Sfx.gust();
+  },
+
+  // The character's own hop particle: a few hearts, notes, bubbles... at the
+  // feet, small, short-lived, and gone under reduced motion.
+  _cfx: [], _flyers: [], _closeT: 0,
+  charFx(col, row) {
+    const kind = this.character().fx;
+    if (!kind || !Art.motion) return;
+    const [x, y] = this.toScreen(col, row, 0.1), T = this.TILE;
+    const n = kind === "confetti" || kind === "glitter" ? 4 : 2;
+    for (let i = 0; i < n; i++) {
+      if (this._cfx.length > 30) this._cfx.shift();
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 2;
+      const sp = T * (0.5 + Math.random() * 0.6);
+      this._cfx.push({ kind, x: x + (Math.random() - 0.5) * T * 0.4, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+                       g: kind === "bubbles" || kind === "notes" || kind === "embers" ? -T * 0.4 : T * 1.2,
+                       t: 0, life: 0.55 + Math.random() * 0.2, r: T * 0.07, c: null, rot: Math.random() * 6 });
+    }
+  },
+
+  // Screen-space overlay effects, drawn by both views: character particles,
+  // streaks, and coins flying to the counter.
+  drawOverlayFx(ctx) {
+    if (!this._cfx.length && !this._flyers.length) return;
+    ctx.save();
+    for (const p of this._cfx) Art.fxParticle(ctx, p, 1 - p.t / p.life);
+    if (this._flyers.length) {
+      const el = document.getElementById("g-coins");
+      const r = el && el.getBoundingClientRect();
+      const tx = r && r.width ? r.left + r.width * 0.25 : this.W - 60, ty = r && r.height ? r.top + r.height / 2 : 30;
+      for (const f of this._flyers) {
+        const k = f.t, e = k * k * (3 - 2 * k);
+        const x = f.x0 + (tx - f.x0) * e, y = f.y0 + (ty - f.y0) * e - Math.sin(Math.PI * k) * this.TILE * 0.8;
+        ctx.globalAlpha = 0.95;
+        Art.coin(ctx, x, y, this.TILE * (1 - k * 0.45), k * 12);
+      }
+    }
+    ctx.restore();
+  },
+
+  overlayBusy() { return this._cfx.length > 0 || this._flyers.length > 0; },
 
   // Capped, so a long run cannot grow this list without bound.
   puff(col, row, kind) {

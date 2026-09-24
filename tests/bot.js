@@ -87,6 +87,8 @@ function loadGame() {
       "globalThis.LEGACY_SKINS = LEGACY_SKINS;",
       "globalThis.LEGACY_DRAW = LEGACY_DRAW;",
       "globalThis.mergeProgress = mergeProgress;",
+      "globalThis.__endless = { ENDLESS, STALL };",
+      "globalThis.__roster = { Roster, Collection, PLANS, COLLECTIONS, STATS, SECRETS, EVENTS, EVENT_ROWS, FOUNDING, PRIZE_COST, eventActive, easterSunday };",
     ])
     .join("\n");
   vm.runInContext(source, sandbox, { filename: "chicken-cross.js" });
