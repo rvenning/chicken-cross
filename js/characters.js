@@ -90,8 +90,13 @@ Object.assign(Art, {
     const P = PLANS[ch.plan] || PLANS.chicken, A = P.anchor, pal = ch.pal;
     st = st || {};
     if (ch.back) this.extraBack(ctx, s, A, ch.back, pal);
-    P.paint(ctx, s, pal, st);
-    if (ch.mark) this.marking(ctx, s, A, ch.mark, pal);
+    // The newer plans call st.mark() straight after their body, so markings
+    // sit on the body and under the head; the original birds never did, so
+    // theirs go on afterwards, clipped away from the head.
+    let marked = !ch.mark;
+    const st2 = ch.mark ? Object.assign({}, st, { mark: () => { marked = true; this.marking(ctx, s, A, ch.mark, pal); } }) : st;
+    P.paint(ctx, s, pal, st2);
+    if (!marked) this.marking(ctx, s, A, ch.mark, pal);
     if (ch.neck) this.extraNeck(ctx, s, A, ch.neck, pal);
     if (ch.face && !st.dead) this.extraFace(ctx, s, A, ch.face, pal);
     if (ch.hat) this.hat(ctx, s, A, ch.hat, pal);

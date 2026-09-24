@@ -193,6 +193,7 @@ function parseLine(line, col, i, PLANS) {
     else if (k === "s") ch.unlock = { type: "secret", secret: v };
     else if (k === "e") { const [ev, tier] = v.split(":"); ch.unlock = { type: "season", event: ev, tier: +tier || 1 }; }
     else if (k === "id") ch.id = v;
+    else if (k === "form") ch.pal.form = v;
     else if (["hat", "neck", "face", "back", "mark", "fx", "voice", "theme"].includes(k)) ch[k] = v;
     else ch.pal[k] = v.startsWith("#") || v.startsWith("rgba") ? v : "#" + v;
   }
