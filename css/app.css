@@ -82,6 +82,7 @@
 @keyframes bestpop { from { transform: scale(.4); opacity: 0; } }
 .res-coins { margin: 2px 0 12px; }
 .btn.res-again { font-size: 28px; min-height: 72px; margin-bottom: 12px; }
+.res-queue { font-size: 14px; font-weight: 700; margin: -4px 0 12px !important; opacity: .85 !important; }
 .res-hint { font-size: 12px; opacity: .55; margin-top: 10px; }
 .unlock-strip { display: flex; align-items: center; gap: 6px; width: 100%; margin: 0 0 12px; padding: 6px 10px;
   border: 2px solid #ffb32b; border-radius: 14px; background: #fff6df; color: #12232e; font: inherit;

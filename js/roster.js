@@ -14,6 +14,8 @@
 // Unlocks, and the rules that keep them kind:
 //   founding -- the original twelve birds, owned by every player, always
 //   prize    -- the Prize Machine: coins earned in play, never duplicates
+// Everything other than a Prize Machine win is EARNED, and earned characters
+// arrive one at a time -- see Collection.qualify.
 //   ach      -- a visible achievement or campaign milestone
 //   secret   -- a playful action, hinted at but not spelled out
 //   season   -- an annual event that comes back every year
@@ -21,8 +23,10 @@
 // and sync merges them by union.
 "use strict";
 
-const PRIZE_COST = 100;
-const MILESTONE_BONUS = 5;          // coins for every 25 rows of an endless run
+const PRIZE_COST = 150;
+// Earned characters arrive one at a time: at most one per run, and at least
+// this many runs apart. See Collection.qualify.
+const AWARD_GAP = 3;
 
 const RARITIES = [
   { id:"common",    label:"Common",    color:"#8d9aa6" },
@@ -79,31 +83,31 @@ function worldsDone(g) { let n = 0; for (let w = 0; w < 10; w++) if (worldLevels
 // is what the locked card says. App-level ones are fired by name from the
 // menus instead (see Collection.trigger) and have no test.
 const SECRETS = {
-  moonwalk:   { hint: "Some birds prefer to face the way they came…",        test: r => r.stats.maxBackRun >= 5 },
+  moonwalk:   { hint: "Some birds prefer to face the way they came…",        test: r => r.stats.maxBackRun >= 8 },
   logSurfer:  { hint: "Stay aboard. Just… stay aboard.",                     test: r => r.stats.maxLogRide >= 8 },
-  thirteen:   { hint: "An unlucky number to stop on.",                       test: r => !r.won && r.maxRow === 13 },
-  oops:       { hint: "Everyone's first hop is the hardest.",                test: r => !r.won && r.maxRow <= 1 },
+  thirteen:   { hint: "An unlucky number to stop on. Three times.",          test: (r, g) => st(g, "thirteenRuns") >= 3 },
+  oops:       { hint: "Everyone's first hop is the hardest. Very hard, ten times over.", test: (r, g) => st(g, "oopsRuns") >= 10 },
   arrow:      { hint: "Straight ahead, no turning, for a long way.",         test: r => r.mode === "endless" && r.maxRow >= 40 && r.stats.side === 0 },
   penniless:  { hint: "Walk past every coin you see. Every single one.",     test: r => r.mode === "endless" && r.maxRow >= 60 && r.coins === 0 },
-  coinCombo:  { hint: "Coin, coin, coin! Three hops in a row.",              test: r => r.stats.maxCoinRun >= 3 },
+  coinCombo:  { hint: "Coin, coin, coin, coin! Four hops in a row.",         test: r => r.stats.maxCoinRun >= 4 },
   bothSides:  { hint: "See both edges of the world in one run.",             test: r => r.stats.edges === 3 },
-  treeHugger: { hint: "Trees make good friends. Bump into lots of them.",    test: r => r.stats.bumpTree >= 12 },
-  wallBonk:   { hint: "What's past the edge of the world? Keep trying.",     test: r => r.stats.bumpEdge >= 10 },
+  treeHugger: { hint: "Trees make good friends. Bump into lots of them.",    test: r => r.stats.bumpTree >= 20 },
+  wallBonk:   { hint: "What's past the edge of the world? Keep trying.",     test: r => r.stats.bumpEdge >= 15 },
   speedy:     { hint: "Zoom! Thirty rows before fifteen seconds are up.",    test: r => r.stats.rowAt15 >= 30 },
   marathon:   { hint: "Keep one run going for three whole minutes.",         test: r => r.mode === "endless" && r.elapsed >= 180 },
-  nearFive:   { hint: "Close… closer… five close calls in one run.",         test: r => r.stats.near >= 5 },
-  railDash:   { hint: "When the lights flash, some birds dash. Three times.",test: r => r.stats.railWarn >= 3 },
-  logLover:   { hint: "Ride twenty-five logs in a single run.",              test: r => r.stats.logs >= 25 },
-  pauseParty: { hint: "Take lots of little breaks in one run.",              test: r => r.stats.pauses >= 5 },
+  nearFive:   { hint: "Close… closer… eight close calls in one run.",        test: r => r.stats.near >= 8 },
+  railDash:   { hint: "When the lights flash, some birds dash. Five times.", test: r => r.stats.railWarn >= 5 },
+  logLover:   { hint: "Ride forty logs in a single run.",                    test: r => r.stats.logs >= 40 },
+  pauseParty: { hint: "Take lots of little breaks in one run.",              test: r => r.stats.pauses >= 8 },
   comeback:   { hint: "Keep going after a knock, all the way to a new best.",test: r => r.stats.bestAfterRevive },
   blownAway:  { hint: "Stand still until the breeze carries you off.",       test: r => r.stats.blown },
   splashes:   { hint: "Splash, splash, splash — three runs in a row.",       test: (r, g) => st(g, "waterStreak") >= 3 },
   bestStreak: { hint: "A new best, and another, and another.",               test: (r, g) => st(g, "bestStreak") >= 3 },
   noCoinWin:  { hint: "Finish a World level without picking up a coin.",     test: r => r.won && r.coins === 0 },
   loyal:      { hint: "The very first chicken can go a long way.",           test: r => r.mode === "endless" && r.maxRow >= 50 && r.charId === "hen" },
-  evening:    { hint: "Play a run after the sun goes down (7pm).",           test: r => r.hour >= 19 },
-  earlyBird:  { hint: "The early bird catches… a run before 7am.",           test: r => r.hour < 7 },
-  heroTaps:   { hint: "Say hello to your character on the home screen. Lots.", app: 10 },
+  evening:    { hint: "Play ten runs after the sun goes down (7pm).",        test: (r, g) => st(g, "eveningRuns") >= 10 },
+  earlyBird:  { hint: "The early bird catches… ten runs before 7am.",        test: (r, g) => st(g, "earlyRuns") >= 10 },
+  heroTaps:   { hint: "Say hello to your character on the home screen. Lots and lots.", app: 25 },
   eggSearch:  { hint: "Search the collection for what every chick starts as.", app: 1 },
   favTen:     { hint: "Pick ten favourites.",                                app: 1 },
   viewFlip:   { hint: "Flip between flat and blocky four times.",            app: 4 },
@@ -227,6 +231,7 @@ const Collection = {
     if (!g) return g;
     if (!Array.isArray(g.owned)) g.owned = [];
     if (!Array.isArray(g.fav)) g.fav = [];
+    if (!Array.isArray(g.pending)) g.pending = [];
     if (!g.stats || typeof g.stats !== "object") g.stats = { coinsEarned: g.coins || 0 };
     if (g.earned === undefined) { g.earned = g.coins || 0; g.spent = 0; }
     if (!g.char || !Roster.byId.has(g.char)) {
@@ -237,13 +242,48 @@ const Collection = {
 
   owns(g, id) { return ownedSet(g).has(id); },
   count(g) { return ownedCount(g); },
+  isPending(g, id) { return (g.pending || []).includes(id) && !this.owns(g, id); },
+  // Earned but not yet arrived, oldest first, ignoring anything already owned
+  // (sync can bring the same character in from another device).
+  waiting(g) { return (g.pending || []).filter(id => Roster.byId.has(id) && !this.owns(g, id)); },
 
-  // The one door every unlock goes through. Returns true when it is new.
+  // Adding to the collection. A Prize Machine win lands here directly;
+  // everything EARNED goes through qualify() and awardNext() instead.
   grant(g, id) {
     if (!Roster.byId.has(id) || this.owns(g, id)) return false;
     g.owned.push(id);
     (g.unseen = Array.isArray(g.unseen) ? g.unseen : []).push(id);
+    if (Array.isArray(g.pending)) g.pending = g.pending.filter(x => x !== id);
     return true;
+  },
+
+  // ONE AT A TIME. Meeting a condition -- an achievement, a secret, an event
+  // distance -- only puts the character in a queue. The queue pays out at the
+  // end of a run, never more than one character per run and never two within
+  // AWARD_GAP runs of each other, so a player who has already finished five
+  // worlds does not get a dozen characters dumped on her the day this ships,
+  // and a lucky run that ticks three boxes is still one new friend.
+  qualify(g, id) {
+    if (!Roster.byId.has(id) || this.owns(g, id)) return false;
+    if (!Array.isArray(g.pending)) g.pending = [];
+    if (g.pending.includes(id)) return false;
+    g.pending.push(id);
+    return true;
+  },
+  runsUntilNext(g) {
+    if (!this.waiting(g).length) return null;
+    const since = g.stats && g.stats.sinceAward !== undefined ? g.stats.sinceAward : AWARD_GAP;
+    return Math.max(0, AWARD_GAP - since);
+  },
+  // Called once per finished run. Returns [] or [the one id that arrived].
+  awardNext(g) {
+    g.stats = g.stats || {};
+    const since = g.stats.sinceAward !== undefined ? g.stats.sinceAward : AWARD_GAP;
+    const next = this.waiting(g)[0];
+    if (!next || since < AWARD_GAP) return [];
+    this.grant(g, next);
+    g.stats.sinceAward = 0;
+    return [next];
   },
 
   earn(g, n) {
@@ -260,7 +300,9 @@ const Collection = {
 
   // Prize Machine. Every character it can still give is equally likely --
   // no weighting, no duplicates (an owned result is rerolled, which is the
-  // same as never drawing it), and the price is shown before you pay.
+  // same as never drawing it), and the price is shown before you pay. One
+  // pull, one character: anything else the pull happens to earn (the
+  // collecting achievements, the last-coin secret) joins the queue.
   prizePool(g) { const own = ownedSet(g); return Roster.list.filter(c => c.unlock.type === "prize" && !own.has(c.id)); },
   pull(g, rng = Math.random) {
     const pool = this.prizePool(g);
@@ -270,62 +312,72 @@ const Collection = {
     for (let guard = 0; this.owns(g, pick.id) && guard < 50; guard++) pick = pool[Math.floor(rng() * pool.length) % pool.length];
     this.grant(g, pick.id);
     this.bump(g, "pulls");
-    const unlocked = [pick.id];
-    if (g.coins === 0) unlocked.push(...this.trigger(g, "zeroCoins"));
-    unlocked.push(...this.checkAchievements(g));
-    return { id: pick.id, unlocked };
+    const queued = [];
+    if (g.coins === 0) queued.push(...this.trigger(g, "zeroCoins"));
+    queued.push(...this.checkAchievements(g));
+    return { id: pick.id, queued };
   },
 
   bump(g, k, n = 1) { g.stats = g.stats || {}; g.stats[k] = (g.stats[k] || 0) + n; return g.stats[k]; },
 
-  // Achievements: every one whose stat has reached its number. Checked after
-  // every run and on load, so progress made before the collection existed
-  // (a finished world, a long-standing best) counts straight away.
+  // Achievements: every one whose stat has reached its number goes in the
+  // queue. Checked after every run and on load, so progress made before the
+  // collection existed (a finished world, a long-standing best) still counts
+  // -- it just arrives one run at a time like everything else.
   checkAchievements(g) {
     const out = [];
     for (const ch of Roster.list) {
       if (ch.unlock.type !== "ach") continue;
-      if (STATS[ch.unlock.stat].get(g) >= ch.unlock.n && this.grant(g, ch.id)) out.push(ch.id);
+      if (STATS[ch.unlock.stat].get(g) >= ch.unlock.n && this.qualify(g, ch.id)) out.push(ch.id);
     }
     return out;
   },
 
   secretChars(name) { return Roster.list.filter(c => c.unlock.type === "secret" && c.unlock.secret === name); },
 
-  // App-level secrets: counted in stats, granted when the count is reached.
+  // App-level secrets: counted in stats, queued when the count is reached.
   trigger(g, name, n = 1) {
     const S = SECRETS[name];
     if (!S || !S.app) return [];
-    const k = "t_" + name;
-    const v = this.bump(g, k, n);
+    const v = this.bump(g, "t_" + name, n);
     if (v < S.app) return [];
-    return this.secretChars(name).filter(c => this.grant(g, c.id)).map(c => c.id);
+    return this.secretChars(name).filter(c => this.qualify(g, c.id)).map(c => c.id);
   },
 
-  // A run has ended: fold its counters into the save and hand out whatever
-  // it earned. `r` is described above SECRETS.
-  // A revived run ends twice; the second time, r.first is false and r.delta
-  // holds only what happened since the first, so nothing is counted twice.
+  // A run has ended: fold its counters into the save, queue whatever it
+  // earned, and let at most one character out of the queue. `r` is
+  // described above SECRETS. A revived run ends twice; the second time
+  // r.first is false and r.delta holds only what happened since the first,
+  // so nothing is counted twice -- and only the first ending can award.
   recordRun(g, r, date = new Date()) {
     const d = r.delta || r.stats, first = r.first !== false;
-    if (first) this.bump(g, "runs");
+    if (first) {
+      this.bump(g, "runs");
+      // never awarded yet counts as ready: the first earned one comes straight away
+      if (g.stats.sinceAward === undefined) g.stats.sinceAward = AWARD_GAP;
+      this.bump(g, "sinceAward");
+    }
     this.bump(g, "hops", d.fwd);
     this.bump(g, "near", d.near);
     this.bump(g, "logs", d.logs);
     this.bump(g, "rails", d.rails);
     g.stats.maxRunCoins = Math.max(g.stats.maxRunCoins || 0, r.coins);
     if (first) {
+      const hour = date.getHours();
       g.stats.waterStreak = !r.won && r.reason === "water" ? (g.stats.waterStreak || 0) + 1 : 0;
       g.stats.bestStreak = r.newBest ? (g.stats.bestStreak || 0) + 1 : 0;
+      if (!r.won && r.maxRow <= 1) this.bump(g, "oopsRuns");
+      if (!r.won && r.maxRow === 13) this.bump(g, "thirteenRuns");
+      if (hour >= 19) this.bump(g, "eveningRuns");
+      if (hour < 7) this.bump(g, "earlyRuns");
     }
-    const out = [];
     const rr = Object.assign({ hour: date.getHours() }, r);
     for (const [name, S] of Object.entries(SECRETS)) {
-      if (S.test && S.test(rr, g)) for (const c of this.secretChars(name)) if (this.grant(g, c.id)) out.push(c.id);
+      if (S.test && S.test(rr, g)) for (const c of this.secretChars(name)) this.qualify(g, c.id);
     }
-    if (r.mode === "endless") out.push(...this.checkSeason(g, r.maxRow, date));
-    out.push(...this.checkAchievements(g));
-    return out;
+    if (r.mode === "endless") this.checkSeason(g, r.maxRow, date);
+    this.checkAchievements(g);
+    return first ? this.awardNext(g) : [];
   },
 
   activeEvents(date = new Date()) { return Object.keys(EVENTS).filter(ev => eventActive(ev, date)); },
@@ -333,7 +385,7 @@ const Collection = {
     const out = [], live = new Set(this.activeEvents(date));
     for (const ch of Roster.list) {
       const u = ch.unlock;
-      if (u.type === "season" && live.has(u.event) && rows >= EVENT_ROWS[u.tier - 1] && this.grant(g, ch.id)) out.push(ch.id);
+      if (u.type === "season" && live.has(u.event) && rows >= EVENT_ROWS[u.tier - 1] && this.qualify(g, ch.id)) out.push(ch.id);
     }
     return out;
   },
@@ -342,6 +394,7 @@ const Collection = {
   hint(ch, g) {
     const u = ch.unlock;
     if (u.type === "founding") return "One of the Founding Flock";
+    if (this.isPending(g, ch.id)) return "🎁 Earned! Arriving soon — keep playing";
     if (u.type === "prize") return `Win it from the Prize Machine (🪙${PRIZE_COST})`;
     if (u.type === "ach") {
       const S = STATS[u.stat], have = Math.min(S.get(g), u.n);

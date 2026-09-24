@@ -70,7 +70,6 @@ WORLDS.forEach((world, wi) => {
         carMin: ramp(1.5, 3.0),
         carMax: ramp(3.0, 5.2),
         truckChance: ramp(0.22, 0.34),
-        creep: ramp(0.45, 0.95),
         coinRate: 0.42,
         railFast: ramp(12, 19),
       },

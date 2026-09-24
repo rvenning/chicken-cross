@@ -156,6 +156,17 @@ test("progress stops the push", () => {
   assert.strictEqual(Game.camForced, cam, "and the push stops");
 });
 
+test("campaign levels use the same camera: no creep, only the anti-stall push", () => {
+  App.startLevel(8);
+  Game.move(0, 1); run(0.3);
+  const cam = Game.camForced;
+  run(STALL.warn - 0.2);
+  assert.ok(Game.running, "waiting a few seconds on a level is safe now");
+  assert.strictEqual(Game.camForced, cam, "and the camera did not creep");
+  run(STALL.push + STALL.pushSeconds + 2);
+  assert.ok(!Game.running && Game.result.reason === "fell", "standing still for ever is still not a strategy");
+});
+
 test("the bot makes real progress in endless", () => {
   const reach = [];
   for (let a = 0; a < 6; a++) {
