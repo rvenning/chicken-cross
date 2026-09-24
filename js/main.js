@@ -71,9 +71,8 @@ const App = {
     const g = this.prog();
     this.applyPrefs(g);
     // Anything already earned before the collection existed -- a finished
-    // world, a long-standing best -- unlocks the moment she arrives.
-    const got = Collection.checkAchievements(g);
-    if (got.length) { this.save(g); this.toast(`🎉 ${got.length} new character${got.length > 1 ? "s" : ""} unlocked!`); }
+    // world, a long-standing best -- is queued, and arrives one run at a time.
+    if (Collection.checkAchievements(g).length) this.save(g);
     const go = this.pendingStart; this.pendingStart = null;
     if (go === "endless") this.startEndless();
     else this.showHome();
@@ -134,7 +133,8 @@ const App = {
     this.el("home-stats").innerHTML =
       `<span>🏁 <b>${g.best || 0}</b> best</span><span>🪙 <b>${g.coins || 0}</b></span>`;
     this.el("home-worlds").textContent = `${levelsDone(g)}/${LEVELS.length} levels`;
-    this.el("home-chars").textContent = `${Collection.count(g)}/${Roster.list.length}`;
+    const wait = Collection.waiting(g).length;
+    this.el("home-chars").textContent = `${Collection.count(g)}/${Roster.list.length}${wait ? " · 🎁" + wait : ""}`;
     const can = (g.coins || 0) >= PRIZE_COST && Collection.prizePool(g).length;
     const btn = this.el("btn-prize");
     btn.innerHTML = can ? `🎰 Prize Machine <b>— you can win one!</b>` : `🎰 Prize Machine · 🪙${PRIZE_COST}`;
@@ -214,7 +214,7 @@ const App = {
     // its own difficulty with distance, so only the coin rate, the fallback
     // train speed and the opening world's art are read from here.
     const params={ weights:WORLDS[0].w, theme:WORLDS[0].theme, wi:0,
-      carMin:1.5, carMax:4.9, truckChance:0.3, creep:0, coinRate:0.42, railFast:15 };
+      carMin:1.5, carMax:4.9, truckChance:0.3, coinRate:0.42, railFast:15 };
     Game.begin({ mode:"endless", params, target:0 });
   },
   again() {
@@ -320,15 +320,19 @@ const App = {
     const sheet=this.el("result-sheet");
     const got = this.recordRun(res);
     const g=this.prog();
-    const unlock = got.length ? `<button class="unlock-strip" id="r-unlock">${got.slice(0,3).map(id =>
-      `<canvas data-id="${id}"></canvas>`).join("")}<span>🎉 <b>${got.length === 1 ? esc(Roster.get(got[0]).name) : got.length + " characters"}</b> unlocked!</span></button>` : "";
+    // At most one character arrives per run (Collection.awardNext); if more
+    // are earned and waiting, say how many and when the next one comes.
+    const wait = Collection.waiting(g).length, next = Collection.runsUntilNext(g);
+    const unlock = got.length ? `<button class="unlock-strip" id="r-unlock"><canvas data-id="${got[0]}"></canvas><span>🎉 <b>${esc(Roster.get(got[0]).name)}</b> joined your collection!</span></button>`
+      : "";
+    const queue = wait ? `<p class="res-queue">🎁 ${wait} earned character${wait > 1 ? "s" : ""} on the way · next ${Math.max(1, next) === 1 ? "after your next run" : "in " + next + " runs"}</p>` : "";
     if (res.type==="win") {
       const next = Game.level.gi+1;
       const hasNext = next<LEVELS.length;
       sheet.innerHTML=`<h2>${Game.level.world.emoji} Level Complete!</h2>
         <div class="stars">${[0,1,2].map(i=>`<span>${i<res.stars?"★":"☆"}</span>`).join("")}</div>
         <p>🪙 ${res.coins} coins collected</p>
-        ${unlock}
+        ${unlock}${queue}
         <div class="row-btns2">
           <button class="btn grey" id="r-map">🗺️ Worlds</button>
           <button class="btn blue" id="r-retry">↻ Retry</button>
@@ -348,7 +352,7 @@ const App = {
         <div class="res-dist">${res.dist}<small>${level ? `of ${Game.target} rows` : "rows"}</small></div>
         ${isBest ? `<div class="res-best new">★ NEW BEST ★</div>` : `<div class="res-best">🏁 Best ${g.best}</div>`}
         <p class="res-coins">🪙 +${res.coins} this run · ${g.coins} saved</p>
-        ${unlock}
+        ${unlock}${queue}
         <button class="btn green wide res-again" id="r-retry">↻ Again</button>
         <div class="row-btns2">
           <button class="btn grey" id="r-map">${level ? "🗺️ Worlds" : "🏠 Home"}</button>
@@ -369,12 +373,13 @@ const App = {
     if (got.length) Sfx.prize();
   },
 
-  // Tell her about new characters from anywhere in the menus.
+  // A secret found in the menus is EARNED, so it joins the queue like
+  // everything else and arrives after a run; say so, once.
   unlocked(ids, g) {
     if (!ids || !ids.length) return;
     this.save(g || this.prog());
-    Sfx.prize();
-    this.toast(`🎉 ${ids.length === 1 ? Roster.get(ids[0]).name : ids.length + " characters"} unlocked!`);
+    Sfx.milestone();
+    this.toast("🎁 You found a secret! It will arrive after a run.");
   },
 
   /* ----- leaderboard ----- */

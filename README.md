@@ -7,10 +7,10 @@ dodge the cars, ride the logs, and don't argue with the trains.
 
 ## Features
 - ▶ **Hop In**: Endless is the main event — one tap from the home screen (or straight from the splash) into a run that travels through all ten worlds, built from readable chunks: road blocks (convoys, zig-zags, express lanes, hauliers), rivers, railway encounters and rest rows
-- 💨 No creeping camera in Endless: it follows you, and only warns — then pushes — a bird that stops making progress for several seconds
+- 💨 No creeping camera, in Endless or the Worlds: it follows you, and only warns — then pushes — a bird that stops making progress for several seconds
 - ↻ Quick retry: the result card appears half a second after a crash; tap anywhere or press Space to go again
 - 🐣 **420 characters** in 33 collections, built from 39 body plans (birds, farm and woodland animals, pets, reptiles, minibeasts, sea creatures, dragons, ghosts, robots, food, a teapot, people) with hats, scarves, capes, markings, hop particles, voices and a few presentation themes. All cosmetic: every character has the same hitbox, hop and score
-- 🎰 Prize Machine: 🪙100 for a character you don’t have yet — every one equally likely, never a duplicate. Others come from achievements, secrets and annual events. No ads, no real money
+- 🎰 Prize Machine: 🪙150 for a character you don’t have yet — every one equally likely, never a duplicate. Others are earned from achievements, secrets and annual events, and arrive one at a time: at most one per run, at least three runs apart (`AWARD_GAP` in js/roster.js). No ads, no real money
 - 🗺️ Worlds: 10 worlds × 4 levels (Sunny Meadows to the lava rivers of Volcano Finale), the original campaign
 - 🚂 Railway crossings with warning lights, lowering gates, and very fast trains
 - 🪙 Coins to collect; 💛 spend 50 to revive where you died

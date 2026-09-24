@@ -22,8 +22,13 @@ const mergeProgress = (a, b) => {
     const v = newer[k] !== undefined ? newer[k] : older[k];
     if (v !== undefined) out[k] = v;
   }
-  // Characters are never lost: the owned list merges as a union.
+  // Characters are never lost: the owned list merges as a union, and so does
+  // the queue of earned-but-not-yet-arrived ones (minus any now owned).
   if (a.owned || b.owned) out.owned = [...new Set([...(a.owned || []), ...(b.owned || [])])];
+  if (a.pending || b.pending) {
+    const own = new Set(out.owned || []);
+    out.pending = [...new Set([...(a.pending || []), ...(b.pending || [])])].filter(id => !own.has(id));
+  }
   // Lifetime counters only ever grow, so the larger of each is the truth.
   if (a.stats || b.stats) {
     out.stats = { ...(a.stats || {}) };

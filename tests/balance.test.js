@@ -81,7 +81,9 @@ test("a level the bot wins is never a grind", () => {
 test("declared difficulty does not go backwards across the campaign", () => {
   // Parameter-based, so it's stable regardless of bot skill.
   const first = LEVELS[0].params, last = LEVELS[LEVELS.length - 1].params;
-  assert.ok(last.creep >= first.creep, "camera creep should not decrease");
+  // (There is no camera creep to ramp any more: every mode uses the
+  // anti-stall camera, which tests/endless.test.js covers.)
+  assert.ok(last.railFast >= first.railFast, "train speed should not decrease");
   assert.ok(last.carMax >= first.carMax, "top car speed should not decrease");
   assert.ok(LEVELS[LEVELS.length - 1].target > LEVELS[0].target, "targets should grow");
 });

@@ -79,7 +79,7 @@ const Coll = {
         ${col.blurb ? `<p class="coll-blurb">${esc(col.blurb)}</p>` : ""}<div class="coll-grid">` +
         list.map(ch => {
           const o = own.has(ch.id), hidden = !o && ch.unlock.type === "secret";
-          const tag = !o ? (ch.unlock.type === "prize" ? "🎰" : ch.unlock.type === "secret" ? "❓" : ch.unlock.type === "season" ? "📅" : "🏅") : "";
+          const tag = !o ? (Collection.isPending(g, ch.id) ? "🎁" : ch.unlock.type === "prize" ? "🎰" : ch.unlock.type === "secret" ? "❓" : ch.unlock.type === "season" ? "📅" : "🏅") : "";
           return `<button class="cc-card${o ? "" : " locked"}${ch.id === g.char ? " current" : ""}" data-id="${ch.id}"
             aria-label="${esc(hidden ? "Secret character" : ch.name)}${o ? "" : ", locked"}">
             <canvas></canvas>${unseen.has(ch.id) ? `<i class="cc-new">NEW</i>` : ""}${g.fav.includes(ch.id) ? `<i class="cc-fav">♥</i>` : ""}
@@ -201,8 +201,7 @@ const Coll = {
     App.el("pz-play").onclick = () => { this.choose(res.id); App.closeModal("prize-modal"); this.refreshBehind(); };
     App.el("pz-again").onclick = () => { this.prizeIdle(); setTimeout(() => this.pull(), 0); };
     App.el("pz-close").onclick = () => { Sfx.click(); App.closeModal("prize-modal"); this.refreshBehind(); };
-    const extra = res.unlocked.filter(id => id !== res.id);
-    if (extra.length) App.toast(`🎉 Also unlocked: ${extra.map(id => Roster.get(id).name).join(", ")}!`);
+
   },
 
   // Whatever is behind the modal shows the new coin total and collection.

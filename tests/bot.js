@@ -90,7 +90,7 @@ function loadGame() {
       "globalThis.__endless = { ENDLESS, STALL };",
       "globalThis.__roster2 = { HATS, THEMES, PLAN3D, VOICES };",
       "globalThis.__random = (f) => { const old = Math.random; if (f) Math.random = f; return old; };",
-      "globalThis.__roster = { Roster, Collection, PLANS, COLLECTIONS, STATS, SECRETS, EVENTS, EVENT_ROWS, FOUNDING, PRIZE_COST, eventActive, easterSunday };",
+      "globalThis.__roster = { Roster, Collection, PLANS, COLLECTIONS, STATS, SECRETS, EVENTS, EVENT_ROWS, FOUNDING, PRIZE_COST, AWARD_GAP, eventActive, easterSunday };",
     ])
     .join("\n");
   vm.runInContext(source, sandbox, { filename: "chicken-cross.js" });

@@ -16,7 +16,7 @@ const { loadGame, botStep, FPS, DT } = require("./bot.js");
 
 const game = loadGame();
 const { Game, App, sandbox } = game;
-const { Roster, Collection, PLANS, STATS, SECRETS, EVENTS, EVENT_ROWS, FOUNDING, PRIZE_COST, eventActive } = sandbox.__roster;
+const { Roster, Collection, PLANS, STATS, SECRETS, EVENTS, EVENT_ROWS, FOUNDING, PRIZE_COST, AWARD_GAP, eventActive } = sandbox.__roster;
 const { Art, R3, mergeProgress } = sandbox;
 const { HATS, THEMES, PLAN3D, VOICES } = sandbox.__roster2;
 const ROOT = path.join(__dirname, "..");
@@ -288,6 +288,7 @@ test("achievements count progress made before the collection existed", () => {
   assert.ok(got.some(u => u.stat === "world3:0"), "all its stars should unlock its star");
   assert.ok(got.some(u => u.stat === "best" && u.n === 100), "a best of 120 passes the 100 milestone");
   assert.ok(!got.some(u => u.stat === "best" && u.n === 150));
+  assert.strictEqual(Collection.count(g), 12, "earned, queued, but not all handed over at once");
 });
 
 test("seasonal characters come with their event, and only then", () => {
@@ -295,17 +296,71 @@ test("seasonal characters come with their event, and only then", () => {
   const g = Collection.migrate(blank());
   same(Collection.checkSeason(g, 40, new Date(2026, 6, 1)).filter(id => id === ch.id), []);
   assert.ok(Collection.checkSeason(g, 40, new Date(2026, 11, 10)).includes(ch.id));
-  assert.ok(Collection.checkSeason(g, 40, new Date(2031, 11, 10)).length === 0, "and it stays owned");
+  assert.ok(Collection.checkSeason(g, 40, new Date(2031, 11, 10)).length === 0, "and it is not queued twice");
 });
 
-test("secrets fire from a run's own counters", () => {
+const quietRun = (over) => ({ mode: "endless", maxRow: 20, coins: 2, reason: "car", won: false, elapsed: 20, charId: "hen", first: true,
+  stats: { ...Game.runStats, side: 1, maxLogRide: 0, bumpTree: 0, bumpEdge: 0, edges: 0, maxBackRun: 0, near: 0, logs: 0, pauses: 0, railWarn: 0, maxCoinRun: 0, rowAt15: 0 }, ...over });
+const noon = new Date(2026, 2, 3, 12);
+
+test("secrets fire from a run's own counters, and the accidental ones need doing on purpose", () => {
   const g = Collection.migrate(blank());
-  const stats = { ...Game.runStats, maxBackRun: 6, side: 0, maxLogRide: 0, bumpTree: 0, edges: 0 };
-  const got = Collection.recordRun(g, { mode: "endless", maxRow: 13, coins: 2, reason: "car", won: false, elapsed: 20, charId: "hen", stats, first: true }, new Date(2026, 2, 3, 12));
-  const secrets = got.map(id => Roster.get(id).unlock.secret);
-  assert.ok(secrets.includes("moonwalk"));
-  assert.ok(secrets.includes("thirteen"));
-  assert.ok(!secrets.includes("evening"), "noon is not the evening");
+  const got = Collection.recordRun(g, quietRun({ maxRow: 13, stats: { ...quietRun().stats, maxBackRun: 9 } }), noon);
+  assert.strictEqual(got.length, 1);
+  assert.strictEqual(Roster.get(got[0]).unlock.secret, "moonwalk");
+  const thirteen = Collection.secretChars("thirteen")[0].id;
+  assert.ok(!Collection.isPending(g, thirteen), "stopping on 13 once is an accident, not a secret");
+  Collection.recordRun(g, quietRun({ maxRow: 13 }), noon); Collection.recordRun(g, quietRun({ maxRow: 13 }), noon);
+  assert.ok(Collection.isPending(g, thirteen) || Collection.owns(g, thirteen), "three times is on purpose");
+  assert.ok(!Collection.isPending(g, Collection.secretChars("evening")[0].id), "noon is not the evening");
+});
+
+test("earned characters arrive one at a time: one per run, at least AWARD_GAP runs apart", () => {
+  // A save that has already done a lot: many achievements at once.
+  const levels = {};
+  for (let i = 0; i < 24; i++) levels[i] = { stars: 3 };
+  const g = Collection.migrate({ ...blank(), best: 160, levels });
+  const earned = Collection.checkAchievements(g).length;
+  assert.ok(earned >= 10, `test save should qualify for lots (${earned})`);
+  assert.strictEqual(Collection.count(g), 12, "qualifying hands nothing out by itself");
+  const arrivals = [];
+  for (let run = 1; run <= 60; run++) {
+    const got = Collection.recordRun(g, quietRun(), noon);
+    assert.ok(got.length <= 1, `run ${run} awarded ${got.length} characters`);
+    if (got.length) arrivals.push(run);
+  }
+  for (let i = 1; i < arrivals.length; i++)
+    assert.ok(arrivals[i] - arrivals[i - 1] >= AWARD_GAP, `arrivals at runs ${arrivals[i - 1]} and ${arrivals[i]}`);
+  assert.strictEqual(arrivals[0], 1, "the first earned character does not keep her waiting");
+  // while the queue lasts they arrive on a steady beat (the 60 runs earn a
+  // couple more themselves -- "play 20 runs", "play 50 runs")
+  assert.strictEqual(arrivals.length, Math.floor((60 - 1) / AWARD_GAP) + 1);
+  assert.ok(Collection.waiting(g).length >= 0 && Collection.count(g) === 12 + arrivals.length);
+  // a revived run ending a second time never awards
+  const g2 = Collection.migrate({ ...blank(), best: 160 }); Collection.checkAchievements(g2);
+  assert.strictEqual(Collection.recordRun(g2, quietRun({ first: false }), noon).length, 0);
+});
+
+test("a Prize Machine pull gives exactly one character", () => {
+  const g = Collection.migrate({ ...blank(), coins: 0 });
+  Collection.earn(g, PRIZE_COST * 30);
+  for (let i = 0; i < 30; i++) {
+    const before = Collection.count(g), res = Collection.pull(g, () => (i * 0.137) % 1);
+    assert.ok(res.id);
+    assert.strictEqual(Collection.count(g), before + 1, `pull ${i} added ${Collection.count(g) - before}`);
+  }
+  // the collecting achievement it passed (owned 25+) waits in the queue instead
+  assert.ok(Collection.waiting(g).length >= 1);
+});
+
+test("the queue syncs: nothing earned is lost, nothing owned is queued twice", () => {
+  const a = Collection.migrate(blank()), b = Collection.migrate(blank());
+  Collection.qualify(a, Collection.secretChars("oops")[0].id);
+  Collection.qualify(b, Collection.secretChars("moonwalk")[0].id);
+  Collection.grant(b, Collection.secretChars("oops")[0].id);
+  const m = mergeProgress(a, b);
+  same(m.pending, [Collection.secretChars("moonwalk")[0].id]);
+  assert.ok(m.owned.includes(Collection.secretChars("oops")[0].id));
 });
 
 /* ------------------------------------------------------ cosmetic only */

@@ -16,10 +16,9 @@ const HOP_TIME = 0.11;
 const REVIVE_COST = 50;
 
 // Endless mode is built from short themed chunks rather than one lane at a
-// time, and it has no creeping camera: the camera follows you, and only a
-// player who stops making progress gets pushed along. Campaign levels keep
-// the original generator and creep untouched -- their 40 levels, stars and
-// the balance tests were all tuned against them.
+// time; campaign levels keep their original generator. Neither has a
+// creeping camera any more: the camera follows you, and only a player who
+// stops making progress gets pushed along (STALL).
 const ENDLESS = {
   SEG: 48,                               // rows of one world before the scenery moves on
   RAMP: 320,                             // rows until the difficulty stops climbing
@@ -85,7 +84,7 @@ const Game = {
     // Streak guards. Roads have always been capped at 3 in a row; water never
     // was -- waterStreak was tracked and then never read, so the river worlds
     // (43-46% water) could deal 4 or 5 consecutive log lanes with no dry ground
-    // between them. That is the one pattern the camera creep makes genuinely
+    // between them. That was the one pattern the old camera creep made genuinely
     // unfair: you can't wait out a bad log phase when you can't stand still.
     // Water goes first so a road streak can't be broken *into* a water streak.
     if (this.waterStreak >= 2) type = "grass";
@@ -426,14 +425,7 @@ const Game = {
 
     if (!this.running) return;
 
-    if (this.mode==="endless") this.antiStall(dt);
-    else {
-      // Camera creep. The distance bonus tops out early on purpose: letting it
-      // run to row 200 meant the camera accelerated hardest exactly when a run
-      // had the most to lose, which read as a difficulty wall rather than a ramp.
-      const creep = this.params.creep + Math.min(this.chick.maxRow,90)*0.004;
-      this.camForced += creep*dt;
-    }
+    this.antiStall(dt);
 
     const c = this.chick;
     if (c.hop<1) {
@@ -459,28 +451,20 @@ const Game = {
     }
 
     this.ensureRows(Math.ceil(this.camForced)+50);
-    // Endless eases a little more softly onto a new furthest row; the
-    // campaign keeps the snappier follow its creep was tuned with.
-    const follow = this.mode==="endless" ? 1-Math.exp(-6*dt) : 1-Math.pow(0.0001,dt);
-    this.camRow = lerp(this.camRow, Math.max(c.row,this.camForced), follow);
+    // The camera eases onto each new furthest row.
+    this.camRow = lerp(this.camRow, Math.max(c.row,this.camForced), 1-Math.exp(-6*dt));
 
     if (c.hop>=1 && !this.dead) this.laneEffects(dt);
     if (this.runStats) this.tallyLane(dt);
 
-    // fell behind camera. Endless takes the bird at the bottom edge of the
-    // screen (the push is the only thing that gets it there); the campaign
-    // keeps its original, more forgiving line.
-    if (!this.dead) {
-      if (this.mode==="endless") {
-        if (c.row < this.floorRow() + 0.35) { this.runStats.blown = true; this.die("fell"); }
-      } else if (c.row < this.camRow - (this.H*this.BASE_Y)/this.TILE - 0.5) this.die("fell");
-    }
+    // Taken at the bottom edge of the screen -- which only the push can do.
+    if (!this.dead && c.row < this.floorRow() + 0.35) { this.runStats.blown = true; this.die("fell"); }
   },
 
   // The exact row at the bottom edge of the screen, for the camera floor.
   floorRow() { return this.camForced - (this.H*(1-this.BASE_Y))/this.TILE; },
 
-  // Endless has no creep. The camera floor trails the furthest row by a
+  // No creep, in endless or the campaign. The camera floor trails the furthest row by a
   // couple of rows (so a step back is allowed), and only a bird that has not
   // reached a new row for STALL.push seconds is pushed: the floor then rises
   // fast enough to reach it in STALL.pushSeconds, whatever the screen size,
@@ -501,7 +485,7 @@ const Game = {
 
   // 0 nothing, 1 warning, 2 being pushed. Read by the renderer and the HUD.
   stallLevel() {
-    if (this.mode!=="endless" || !this.running || this.dead) return 0;
+    if (!this.running || this.dead) return 0;
     return this.stallT >= STALL.push ? 2 : this.stallT >= STALL.warn ? 1 : 0;
   },
   stallProgress() { return clamp((this.stallT - STALL.warn)/(STALL.push - STALL.warn), 0, 1); },
@@ -536,11 +520,7 @@ const Game = {
     if (prev && prev.type==="rail") s.rails++;
     if (this.mode!=="endless") return;
     if (c.maxRow >= this.nextMilestone) {
-      // A few coins for every 25 rows: long runs are what fill the Prize
-      // Machine, and it is announced with the milestone, never hidden.
-      this.runCoins += MILESTONE_BONUS; Collection.earn(this.progress, MILESTONE_BONUS);
-      Storage.saveProgress(this.profile.id, this.progress); this.updateHud();
-      this.emit("milestone", { n:this.nextMilestone, bonus:MILESTONE_BONUS });
+      this.emit("milestone", { n:this.nextMilestone });
       this.nextMilestone += 25;
     }
     if (!this.bestFired && this.startBest >= 5 && c.maxRow > this.startBest) {
