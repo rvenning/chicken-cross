@@ -45,6 +45,7 @@ test("the classic look draws every world and every bird, alive and dead", () => 
       for (const bird of Object.keys(LEGACY_SKINS)) {
         Game.begin({ mode: "level", level: LEVELS[wi], target: LEVELS[wi].target, params: LEVELS[wi].params });
         Game.progress.bird = bird;
+        Game.progress.char = sandbox.__roster.FOUNDING.find(f => f[0] === bird)[1];
         for (let i = 0; i < 20; i++) Game.update(1 / 60);
         assert.doesNotThrow(() => Game.render(), `world ${wi / 4} ${bird}`);
         Game.dead = true; Game.deathReason = "water";
@@ -54,12 +55,17 @@ test("the classic look draws every world and every bird, alive and dead", () => 
   } finally { Game.setLook("new"); }
 });
 
+// The per-bird setting became progress.char when the collection arrived; the
+// save migration is what now carries "the chosen bird wins over the avatar".
 test("the chosen bird wins over the profile avatar", () => {
+  const { Collection } = sandbox.__roster;
   Game.profile = { id: "x", avatar: "\u{1F414}" };
-  Game.progress = { bird: "\u{1F427}" };
+  Game.progress = Collection.migrate({ bird: "\u{1F427}" }, "\u{1F414}");
   assert.strictEqual(Game.bird(), "\u{1F427}");
-  Game.progress = {};
+  assert.strictEqual(Game.character().id, "penguin");
+  Game.progress = Collection.migrate({}, "\u{1F414}");
   assert.strictEqual(Game.bird(), "\u{1F414}");
+  assert.strictEqual(Game.character().id, "hen");
 });
 
 test("sync keeps the newer copy's look and bird, and the best of the rest", () => {

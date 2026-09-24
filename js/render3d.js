@@ -71,8 +71,9 @@ const R3 = {
 
   /* ------------------------------------------------------------- loading */
 
-  load() {
+  load(quiet) {
     if (this.ready || this.loading || this.failed) return;
+    this.quiet = !!quiet;
     if (!this.webgl()) return this.fail("no-webgl");
     this.loading = true;
     const s = document.createElement("script");
@@ -93,7 +94,9 @@ const R3 = {
   fail(why) {
     this.failed = true;
     console.warn("3D view unavailable:", why);
-    if (typeof App !== "undefined" && App.toast) App.toast("3D isn't available here, so you're seeing 2D");
+    // Only worth saying when she asked for 3D; as a default it just quietly stays 2D.
+    if (!this.quiet && typeof App !== "undefined" && App.toast) App.toast("3D isn't available here, so you're seeing 2D");
+    if (typeof Game !== "undefined") { Game.view = "2d"; if (Game.canvas) Game.resize(); }
   },
 
   init(T) {
@@ -218,7 +221,13 @@ const R3 = {
 
   /* -------------------------------------------------------------- colours */
 
-  hex(c) { return "#" + this._c.set(c).getHexString(); },
+  // Pure JS for #rgb/#rrggbb, so the character builders run headless in the
+  // tests; anything else goes through three.js.
+  hex(c) {
+    if (/^#[0-9a-f]{6}$/i.test(c)) return c.toLowerCase();
+    if (/^#[0-9a-f]{3}$/i.test(c)) return "#" + c.slice(1).split("").map(h => h + h).join("").toLowerCase();
+    return "#" + this._c.set(c).getHexString();
+  },
   // mix two colours in sRGB, t=0 -> a
   mix(a, b, t) {
     const pa = parseInt(this.hex(a).slice(1), 16), pb = parseInt(this.hex(b).slice(1), 16);
@@ -241,7 +250,10 @@ const R3 = {
     // for everything flat. Flat ground can't shadow anything the camera sees,
     // so it stays out of the shadow pass; before, it covered the whole shadow
     // map every frame for nothing.
-    const G = Game, th = G.theme, A = Art.pal(G.wi), b = this.bag(), f = this.bag();
+    // An endless run travels through the worlds, so each lane carries its own.
+    const G = Game, wi = Art.laneWorld(lane, G.params && G.params.wi);
+    const th = Art.themeOf(wi, lane && lane.blend), A = Art.pal(wi), b = this.bag(), f = this.bag();
+    const lava = wi === 9, night = !!A.night;
     const rec = { row, lane, group: null, cars: [], logs: [], train: null, arms: [], lamps: [], coin: null, ripples: null };
     const z = -row, HW = this.halfWide(), PF = COLS / 2;
 
@@ -256,7 +268,7 @@ const R3 = {
     };
 
     if (!lane) {                                   // behind the start line
-      ground(this.dark(th.water, 0.35), this.WATER_Y, 0.4, G.wi === 9);
+      ground(this.dark(th.water, 0.35), this.WATER_Y, 0.4, lava);
     } else if (lane.type === "grass") {
       ground(row % 2 ? th.grassA : th.grassB, 0, 0.7);
       // litter: flat flecks that break the colour up without looking solid
@@ -264,12 +276,12 @@ const R3 = {
         const h = hash2(row * 5 + 3, col * 7 + 1);
         if (h < 0.3) this.box(f, A.litter, this.X(col) + (h * 7 % 1 - 0.5) * 0.6, 0.012, z + (h * 13 % 1 - 0.5) * 0.6, 0.14, 0.024, 0.1);
       }
-      for (const col of lane.trees) this.obstacle(b, this.X(col), z, (col * 7 + row) % 3 === 0, row * 97 + col);
+      for (const col of lane.trees) this.obstacle(b, this.X(col), z, (col * 7 + row) % 3 === 0, row * 97 + col, wi);
       // planting beyond the playfield, same painters as the real obstacles
       const ext = Math.ceil(G.extC) + 3;
       for (let i = 1; i <= ext; i++) for (const col of [-i, COLS - 1 + i]) {
         const h = hash2(row, col);
-        if (h < 0.55) this.obstacle(b, this.X(col), z, h < 0.12, row * 97 + col);
+        if (h < 0.55) this.obstacle(b, this.X(col), z, h < 0.12, row * 97 + col, wi);
       }
     } else if (lane.type === "road") {
       ground(th.road, -0.02, 0.7);
@@ -280,24 +292,25 @@ const R3 = {
       // kerb where the road meets anything else
       const prev = G.world[row - 1];
       if (!prev || prev.type !== "road") this.box(f, this.light(th.road, 0.35), 0, -0.01, z + 0.47, HW * 2, 0.03, 0.06);
+      const style = Art.vehicleStyle(row, lane, wi), color = Art.vehicleColor(lane.color, G.themeFx, style);
       for (const car of lane.cars) {
-        const m = this.car(car.kind, lane.color, lane.dir, car.width);
+        const m = this.car(car.kind, color, lane.dir, car.width, style, night);
         m.position.set(this.X(car.x), 0, z);
         rec.cars.push(m);
       }
     } else if (lane.type === "water") {
-      ground(th.water, this.WATER_Y, 0.4, G.wi === 9);
+      ground(th.water, this.WATER_Y, 0.4, lava);
       for (const lg of lane.logs) {
         const m = this.log(lg.len);
         rec.logs.push(m);
       }
-      rec.ripples = this.ripples(th.water, lane.dir, G.wi === 9);
+      rec.ripples = this.ripples(th.water, lane.dir, lava);
       rec.ripples.position.z = z;
     } else if (lane.type === "rail") {
       ground(this.mix(th.road, "#a39788", 0.6), 0, 0.7);
       for (let x = -HW; x < HW; x += 0.5) this.box(f, "#6b4a33", x + 0.25, 0.03, z, 0.14, 0.05, 0.84);
       for (const dz of [-0.24, 0.24]) this.box(f, "#c9ced3", 0, 0.08, z + dz, HW * 2, 0.06, 0.06);
-      rec.train = this.train(lane.dir);
+      rec.train = this.train(lane.dir, night);
       rec.train.position.z = z;
       rec.train.visible = false;
       this.gates(b, rec, z);
@@ -366,8 +379,8 @@ const R3 = {
   /* ------------------------------------------------------------ obstacles */
 
   // One tile-sized solid thing on a grass lane: the world's tree, or its rock.
-  obstacle(b, x, z, rock, seed) {
-    const A = Art.pal(Game.wi);
+  obstacle(b, x, z, rock, seed, wi) {
+    const A = Art.pal(wi);
     const h = (k) => hash2(seed * 31 + k * 13, 17 + k * 9);
     const ry = (h(9) - 0.5) * 0.5, s = 0.9 + h(4) * 0.22;
     if (rock) return this.rock(b, A, x, z, h, s, ry);
@@ -388,7 +401,7 @@ const R3 = {
         break;
       case "fir": {
         trunk(0.14, 0.24);
-        const snow = Game.wi === 3;
+        const snow = wi === 3;
         [[0.78, 0.46, 0.24], [0.6, 0.42, 0.5], [0.4, 0.36, 0.75]].forEach(([w, hh, y], i) => {
           this.put(b, G.cone, c1, x, (y + hh / 2) * s, z, w, hh * s, w, 0, Math.PI / 4 + ry, 0);
           if (snow) this.put(b, G.cone, "#f4fbff", x, (y + hh * 0.78) * s, z, w * 0.5, hh * 0.45 * s, w * 0.5, 0, Math.PI / 4 + ry, 0);
@@ -468,30 +481,103 @@ const R3 = {
 
   /* ------------------------------------------------------------- vehicles */
 
-  // Built facing +x and turned round for lanes that drive left. The body is
-  // width*0.9 long -- the same span the car hitbox is measured against.
-  car(kind, color, dir, width) {
-    const night = !!Art.pal(Game.wi).night;
-    const obj = this.shared(`car|${kind}|${color}|${night}`, (b) => {
+  // Built facing +x and turned round for lanes that drive left. Every body is
+  // width*0.9 long -- the same span the car hitbox is measured against --
+  // whatever style it is; the styles differ in what sits on the chassis.
+  car(kind, color, dir, width, style, night) {
+    style = style || (kind === "truck" ? "box" : "sedan");
+    const obj = this.shared(`car|${kind}|${style}|${color}|${!!night}`, (b) => {
       const L = width * 0.9, glass = "#bfe0ef", tyre = "#23232a";
       const lampB = night ? this.lit(b) : b;
+      const wheels = (xs, r) => { for (const x of xs) for (const zz of [-0.3, 0.3]) this.box(b, tyre, x, r / 2, zz, r, r, 0.08); };
       if (kind === "truck") {
-        const cab = 0.5, bodyL = L - cab - 0.04;
-        this.box(b, "#ecebe6", -L / 2 + bodyL / 2, 0.44, 0, bodyL, 0.62, 0.66);
-        this.box(b, color, -L / 2 + bodyL / 2, 0.3, 0.335, bodyL * 0.92, 0.12, 0.01);
-        this.box(b, color, -L / 2 + bodyL / 2, 0.3, -0.335, bodyL * 0.92, 0.12, 0.01);
-        this.box(b, color, L / 2 - cab / 2, 0.34, 0, cab, 0.44, 0.62);
-        this.box(b, glass, L / 2 - cab / 2 + 0.06, 0.52, 0, cab * 0.6, 0.16, 0.64);
-        this.box(b, "#3a3a44", -L / 2 + bodyL / 2, 0.12, 0, bodyL, 0.08, 0.5);
-        for (const x of [-L / 2 + 0.25, -L / 2 + 0.55, L / 2 - 0.25]) for (const zz of [-0.3, 0.3])
-          this.box(b, tyre, x, 0.1, zz, 0.2, 0.2, 0.08);
-      } else {
+        const cab = 0.5, bodyL = L - cab - 0.04, bx = -L / 2 + bodyL / 2;
+        if (style === "bus") {
+          this.box(b, color, 0, 0.42, 0, L, 0.62, 0.66);
+          this.box(b, glass, 0.04, 0.55, 0, L - 0.3, 0.16, 0.68);
+          this.box(b, this.light(color, 0.35), 0, 0.745, 0, L - 0.1, 0.03, 0.6);
+          this.box(b, glass, L / 2 + 0.005, 0.5, 0, 0.02, 0.24, 0.5);
+          this.box(b, "#3a3a44", 0, 0.12, 0, L, 0.08, 0.5);
+          wheels([-L / 2 + 0.3, L / 2 - 0.3], 0.2);
+        } else {
+          if (style === "tanker") {
+            this.put(b, this.G.cyl, "#cfd6dc", bx, 0.46, 0, 0.6, bodyL, 0.6, 0, 0, Math.PI / 2);
+            this.box(b, color, bx, 0.46, 0, bodyL * 0.3, 0.14, 0.62);
+            this.box(b, "#3a3a44", bx, 0.14, 0, bodyL, 0.1, 0.5);
+          } else if (style === "flatbed") {
+            this.box(b, "#8a8f96", bx, 0.22, 0, bodyL, 0.08, 0.64);
+            for (const [u, c] of [[0.22, "#c98f4a"], [0.55, "#b67a38"], [0.84, "#d9a35a"]])
+              this.box(b, c, -L / 2 + bodyL * u, 0.4, 0, bodyL * 0.24, 0.3, 0.5);
+            this.box(b, "#3a3a44", bx, 0.12, 0, bodyL, 0.08, 0.5);
+          } else if (style === "fire") {
+            this.box(b, color, bx, 0.38, 0, bodyL, 0.5, 0.64);
+            for (const zz of [-0.16, 0.16]) this.box(b, "#e9edf0", bx, 0.67, zz, bodyL * 0.95, 0.04, 0.04);
+            for (let i = 0; i < 7; i++) this.box(b, "#e9edf0", -L / 2 + 0.1 + i * (bodyL - 0.2) / 6, 0.67, 0, 0.03, 0.03, 0.34);
+            this.box(b, "#3a3a44", bx, 0.12, 0, bodyL, 0.08, 0.5);
+          } else {
+            this.box(b, "#ecebe6", bx, 0.44, 0, bodyL, 0.62, 0.66);
+            this.box(b, color, bx, 0.3, 0.335, bodyL * 0.92, 0.12, 0.01);
+            this.box(b, color, bx, 0.3, -0.335, bodyL * 0.92, 0.12, 0.01);
+            this.box(b, "#3a3a44", bx, 0.12, 0, bodyL, 0.08, 0.5);
+          }
+          this.box(b, color, L / 2 - cab / 2, 0.34, 0, cab, 0.44, 0.62);
+          this.box(b, glass, L / 2 - cab / 2 + 0.06, 0.52, 0, cab * 0.6, 0.16, 0.64);
+          if (style === "fire") this.box(night ? this.lit(b) : b, "#4a8fe8", L / 2 - cab / 2, 0.6, 0, 0.12, 0.06, 0.3);
+          wheels([-L / 2 + 0.25, -L / 2 + 0.55, L / 2 - 0.25], 0.2);
+        }
+      } else if (style === "beetle") {
+        this.box(b, color, 0, 0.22, 0, L, 0.22, 0.6);
+        this.box(b, color, -0.02, 0.38, 0, L * 0.72, 0.14, 0.56);
+        this.box(b, glass, -0.02, 0.4, 0, L * 0.6, 0.12, 0.58);
+        this.box(b, this.light(color, 0.1), -0.02, 0.5, 0, L * 0.45, 0.06, 0.46);
+        wheels([-L / 2 + 0.2, L / 2 - 0.2], 0.2);
+      } else if (style === "tractor") {
+        this.box(b, color, 0.12, 0.26, 0, L * 0.7, 0.24, 0.42);
+        this.box(b, this.dark(color, 0.2), -L / 2 + 0.2, 0.3, 0, 0.32, 0.18, 0.4);
+        for (const zz of [-0.28, 0.28]) {
+          this.box(b, tyre, -L / 2 + 0.2, 0.2, zz, 0.4, 0.4, 0.12);
+          this.box(b, tyre, L / 2 - 0.14, 0.1, zz, 0.2, 0.2, 0.08);
+        }
+        for (const [x, zz] of [[-L / 2 + 0.04, -0.14], [-L / 2 + 0.04, 0.14], [-L / 2 + 0.36, -0.14], [-L / 2 + 0.36, 0.14]])
+          this.box(b, "#3a3a44", x, 0.55, zz, 0.03, 0.34, 0.03);
+        this.box(b, "#3a3a44", -L / 2 + 0.2, 0.72, 0, 0.38, 0.03, 0.32);
+        this.box(b, "#3a3a44", L / 2 - 0.2, 0.46, 0.1, 0.04, 0.2, 0.04);
+      } else if (style === "pickup") {
         this.box(b, color, 0, 0.23, 0, L, 0.26, 0.62);
-        this.box(b, this.light(color, 0.15), -0.04, 0.44, 0, L * 0.56, 0.18, 0.54);
-        this.box(b, glass, -0.04, 0.43, 0, L * 0.58, 0.12, 0.56);
-        this.box(b, this.dark(color, 0.1), -0.04, 0.54, 0, L * 0.5, 0.04, 0.5);
-        for (const x of [-L / 2 + 0.2, L / 2 - 0.2]) for (const zz of [-0.3, 0.3])
-          this.box(b, tyre, x, 0.1, zz, 0.2, 0.2, 0.08);
+        this.box(b, this.light(color, 0.15), L * 0.1, 0.44, 0, L * 0.36, 0.18, 0.54);
+        this.box(b, glass, L * 0.1, 0.43, 0, L * 0.38, 0.12, 0.56);
+        for (const zz of [-0.28, 0.28]) this.box(b, color, -L * 0.24, 0.42, zz, L * 0.46, 0.12, 0.05);
+        this.box(b, color, -L / 2 + 0.03, 0.42, 0, 0.05, 0.12, 0.6);
+        wheels([-L / 2 + 0.2, L / 2 - 0.2], 0.2);
+      } else if (style === "van" || style === "icecream") {
+        this.box(b, color, -0.02, 0.4, 0, L - 0.04, 0.58, 0.62);
+        this.box(b, glass, L / 2 - 0.1, 0.5, 0, 0.2, 0.2, 0.64);
+        this.box(b, glass, -0.08, 0.53, 0, L * 0.5, 0.14, 0.64);
+        if (style === "icecream") {
+          this.put(b, this.G.cone8, "#e8b36a", -0.05, 0.78, 0, 0.16, 0.2, 0.16, Math.PI, 0, 0);
+          this.put(b, this.G.ico, "#ff9ec4", -0.05, 0.93, 0, 0.2, 0.2, 0.2);
+        }
+        wheels([-L / 2 + 0.2, L / 2 - 0.2], 0.2);
+      } else if (style === "jeep") {
+        this.box(b, color, 0, 0.27, 0, L, 0.3, 0.62);
+        this.box(b, glass, L * 0.12, 0.5, 0, 0.03, 0.18, 0.56);
+        for (const zz of [-0.26, 0.26]) this.box(b, "#3a3a44", -L * 0.12, 0.56, zz, 0.04, 0.26, 0.04);
+        this.box(b, "#3a3a44", -L * 0.12, 0.69, 0, 0.04, 0.04, 0.56);
+        this.put(b, this.G.cyl, tyre, -L / 2 - 0.02, 0.32, 0, 0.26, 0.06, 0.26, 0, 0, Math.PI / 2);
+        wheels([-L / 2 + 0.2, L / 2 - 0.2], 0.22);
+      } else if (style === "plough") {
+        this.box(b, color, 0, 0.26, 0, L - 0.1, 0.3, 0.62);
+        this.box(b, glass, -0.04, 0.47, 0, L * 0.4, 0.14, 0.56);
+        this.box(b, "#f2c230", L / 2 - 0.04, 0.16, 0, 0.06, 0.24, 0.66, 0, 0, 0);
+        wheels([-L / 2 + 0.2, L / 2 - 0.26], 0.2);
+      } else {                                      // sedan, hatch, taxi
+        const hatch = style === "hatch", cx = hatch ? -0.1 : -0.04, cl = hatch ? 0.66 : 0.56;
+        this.box(b, color, 0, 0.23, 0, L, 0.26, 0.62);
+        this.box(b, this.light(color, 0.15), cx, 0.44, 0, L * cl, 0.18, 0.54);
+        this.box(b, glass, cx, 0.43, 0, L * (cl + 0.02), 0.12, 0.56);
+        this.box(b, this.dark(color, 0.1), cx, 0.54, 0, L * (cl - 0.06), 0.04, 0.5);
+        if (style === "taxi") this.box(night ? this.lit(b) : b, "#fff6c8", cx, 0.6, 0, 0.14, 0.08, 0.26);
+        wheels([-L / 2 + 0.2, L / 2 - 0.2], 0.2);
       }
       if (night) {   // two pools, brightest nearest the lamps
         this.box(this.beamOf(b), "#ffe7a0", L / 2 + 0.6, 0.004, 0, 1.2, 0.01, 0.6);
@@ -518,8 +604,7 @@ const R3 = {
 
   // Engine and two carriages laid out inside the six tiles the train's hitbox
   // covers, exactly as the 2D train is.
-  train(dir) {
-    const night = !!Art.pal(Game.wi).night;
+  train(dir, night) {
     const obj = this.shared(`train|${night}`, (b) => {
       const lampB = night ? this.lit(b) : b;
       let front = 3;
@@ -593,9 +678,9 @@ const R3 = {
   // Each skin gets its own body plan, as in 2D: a recoloured chicken reads as
   // a chicken in fancy dress. Built facing -z (away from the camera, the way
   // she is walking), feet at y=0, about half a tile tall.
-  bird(sk) {
-    const b = this.bag(), bx = (c, x, y, z, sx, sy, sz, rx, ry, rz) =>
-      this.put(b, this.G.box, c, x, y, z, sx, sy, sz, rx, ry, rz);
+  // The founding birds as boxes, emitted through bx(colour, x,y,z, sx,sy,sz,
+  // rx,ry,rz). js/characters3d.js turns them (and every other plan) into a mesh.
+  birdParts(bx, sk) {
     const wing = this.dark(sk.body, 0.14), eye = "#1b1b22";
     const legs = (h, spread, y0) => {
       for (const s of [-1, 1]) {
@@ -752,15 +837,17 @@ const R3 = {
         bx(sk.beak, 0, 0.45, -0.25, 0.05, 0.04, 0.07);
         eyes(0.5, -0.17, 0.112);
     }
-    const g = this.geometry(b), T = this.T;
-    const mat = new T.MeshLambertMaterial({ vertexColors: true, transparent: true });
-    const mesh = new T.Mesh(g, mat);
-    mesh.castShadow = true;
-    const grp = new T.Group(); grp.add(mesh);
-    return grp;
   },
 
   /* ---------------------------------------------------------- the chick */
+
+  // Where a point in the world lands on the screen, for effects drawn on the
+  // 2D overlay (coin sparkles, "Phew!", particles) so they sit on the bird.
+  project(col, row, lift) {
+    const v = this._pv || (this._pv = new this.T.Vector3());
+    v.set(this.X(col), this.standY(row, Game) + lift, -row).project(this.camera);
+    return [(v.x + 1) / 2 * Game.W, (1 - v.y) / 2 * Game.H];
+  },
 
   // Standing height at (col,row): the log top on water, the surface behind
   // the start line, the ground everywhere else.
@@ -772,15 +859,15 @@ const R3 = {
   },
 
   updateChick(G, now) {
-    const key = G.bird();
+    const ch = G.character(), key = ch.id;
     if (key !== this.chickKey) {
-      if (this.chick) { this.scene.remove(this.chick); this.chick.children[0].geometry.dispose(); }
-      this.chick = this.bird(SKINS[key] || SKINS["🐔"]);
+      if (this.chick) { this.scene.remove(this.chick); this.chick.children[0].children[0].geometry.dispose(); }
+      this.chick = this.character(ch);
       this.scene.add(this.chick);
       this.chickKey = key; this.face = 0;
     }
-    const c = G.chick, grp = this.chick, mesh = grp.children[0];
-    const arc = c.hop < 1 ? Math.sin(Math.PI * c.hop) : 0;
+    const c = G.chick, grp = this.chick, body = grp.children[0], mesh = body.children[0];
+    const pose = G.hopPose(c);
     const y0 = c.hop < 1 ? this.standY(c.fromRow, G) + (this.standY(c.toRow, G) - this.standY(c.fromRow, G)) * c.hop
                          : this.standY(c.row, G);
 
@@ -792,27 +879,42 @@ const R3 = {
     if (Math.abs(dx) + Math.abs(dz) > 0.05) this.faceWant = Math.atan2(-dx, -dz);
     let d = (this.faceWant || 0) - this.face;
     d = Math.atan2(Math.sin(d), Math.cos(d));
-    this.face += d * Math.min(1, (Art.motion ? 0.4 : 1));
-    grp.rotation.y = this.face;
+    this.face += d * Math.min(1, (Art.motion ? 0.45 : 1));
+    grp.rotation.set(0, this.face, 0);
 
-    let x = this.X(c.col), z = -c.row, y = y0 + arc * 0.5, sy = 1, sxz = 1;
-    if (c.hop < 1) { sy = 1 + arc * 0.2; sxz = 1 - arc * 0.1; }
+    // The same hop pose the 2D bird uses: crouch, arc, stretch, landing squash,
+    // and a lean into the jump -- all pivoting on the feet.
+    let x = this.X(c.col), z = -c.row, y = y0 + pose.lift, sy = pose.sy, sxz = pose.sx;
+    body.rotation.set(-pose.tilt * 1.6, 0, 0);
     if (G.bumpT > 0 && !G.dead) {
       const l = Math.sin(Math.PI * (1 - G.bumpT)) * 0.15;
       x += G.bumpX * l; z -= G.bumpY * l;
     }
 
+    // Four deaths, four pictures, as in 2D: sinking, flattening, flung down
+    // the line by a train, or tumbling away off the bottom of the screen.
     const under = G.world[Math.round(c.row)];
     const drown = G.dead && (G.deathReason === "water" ||
       (G.deathReason === "fell" && under && under.type === "water"));
+    const fling = G.dead && G.deathReason === "train";
+    const tumble = G.dead && G.deathReason === "fell" && !drown;
     mesh.material.opacity = 1;
     if (G.dead) {
       if (!this.deadAt) this.deadAt = now;
-      const t = Math.min(1, (now - this.deadAt) / (drown ? 600 : 300));
+      const t = Math.min(1, (now - this.deadAt) / (drown ? 600 : fling ? 700 : tumble ? 600 : 300));
       if (drown) {
         y = this.WATER_Y + 0.05 - t * 0.55;
         mesh.material.opacity = Math.max(0, 1 - Math.max(0, t - 0.3) / 0.7);
         this.fx.splash(x, z, t);
+      } else if (fling) {
+        const dir = (G.deathInfo && G.deathInfo.dir) || 1;
+        x += dir * t * 5; y = y0 + Math.sin(Math.PI * Math.min(1, t * 1.2)) * 1.2;
+        body.rotation.set(t * 7 * Art.motion, 0, -dir * t * 9 * Art.motion);
+        mesh.material.opacity = Math.max(0, 1 - Math.max(0, t - 0.5) / 0.5);
+      } else if (tumble) {
+        z += t * t * 2.4; y = y0 + Math.sin(Math.PI * t) * 0.3;
+        body.rotation.set(t * 6 * Art.motion, 0, 0);
+        mesh.material.opacity = Math.max(0, 1 - Math.max(0, t - 0.5) / 0.5);
       } else { sy = 1 - t * 0.82; sxz = 1 + t * 0.45; y = y0; }
     } else { this.deadAt = 0; this.fx.splash(0, 0, -1); }
 
@@ -900,24 +1002,48 @@ const R3 = {
 
   // Lights and sky follow the world, so Night Roads is night in 3D too.
   setWorld(G) {
-    const night = !!Art.pal(G.wi).night;
-    this.scene.background = new this.T.Color(G.theme.bg);
-    this.hemi.color.set(night ? 0x8fa6ff : 0xffffff);
-    this.hemi.groundColor.set(night ? 0x2a2a3a : 0x6d6450);
-    this.hemi.intensity = night ? 1.0 : 1.15;
-    // Hidden rather than dimmed: a light at zero intensity is still in every
-    // shader. Changing the light count recompiles them, once per world.
-    this.lamp.intensity = 3;
-    this.lamp.visible = night;
-    this.sun.color.set(night ? 0xb8c8ff : 0xfff4e0);
-    this.sun.intensity = night ? 1.3 : 2.6;
     this.worldKey = G.world;
-    // Bake every car, log and train this world can show now, while the level
-    // is starting, rather than the first time one scrolls into view.
-    for (const color of CAR_COLORS) for (const [kind, w] of [["car", 1], ["truck", 2]]) this.car(kind, color, 1, w);
+    this.nightK = Art.pal(G.wi).night ? 1 : 0;
+    this.bg = null;
+    // Hidden rather than dimmed would recompile every shader whenever an
+    // endless run walks into the night; a lamp at zero costs less than that.
+    this.lamp.visible = true;
+    this.applyLight(G, 1);
+    // Bake the traffic this world can show now, while the run is starting,
+    // rather than the first time one scrolls into view.
+    const A = Art.pal(G.wi), night = !!A.night;
+    for (const color of CAR_COLORS) {
+      for (const st of A.cars) this.car("car", Art.vehicleColor(color, G.themeFx, st), 1, 1, st, night);
+      for (const st of A.trucks) this.car("truck", Art.vehicleColor(color, G.themeFx, st), 1, 2, st, night);
+    }
     for (const len of [2, 3]) this.log(len);
-    this.train(1);
+    this.train(1, night);
     this.settle = performance.now() + 1500;   // shader compiles; don't judge pace yet
+  },
+
+  // Lights and sky follow the world the camera is in, easing across the
+  // three-row meadow between two worlds, so Night Roads is night in 3D too
+  // and walking into it is dusk rather than a switch.
+  applyLight(G, k) {
+    const want = Art.pal(G.wi).night ? 1 : 0;
+    this.nightK += (want - this.nightK) * Math.min(1, k);
+    const n = this.nightK, c = this._c;
+    this.hemi.color.set(this.mix("#ffffff", "#8fa6ff", n));
+    this.hemi.groundColor.set(this.mix("#6d6450", "#2a2a3a", n));
+    this.hemi.intensity = 1.15 - 0.15 * n;
+    this.sun.color.set(this.mix("#fff4e0", "#b8c8ff", n));
+    this.sun.intensity = 2.6 - 1.3 * n;
+    this.lamp.intensity = 3 * n;
+    const bg = (G.sceneTheme || G.theme).bg;
+    if (bg !== this.bg) {
+      this.bgFrom = this.bg ? this.scene.background.clone() : null;
+      this.bg = bg; this.bgT = this.bgFrom ? 0 : 1;
+      if (!this.bgFrom) this.scene.background = new this.T.Color(bg);
+    }
+    if (this.bgT < 1) {
+      this.bgT = Math.min(1, this.bgT + k);
+      this.scene.background.copy(this.bgFrom).lerp(c.set(bg), this.bgT);
+    }
   },
 
   /* ---------------------------------------------------------- pacing */
@@ -1004,10 +1130,11 @@ const R3 = {
   frame() {
     const G = Game;
     // Which world's art -- the 2D render() sets these, and it is not running.
-    G.wi = (G.params && G.params.wi) || 0;
-    G.night = !!Art.pal(G.wi).night;
+    G.sceneWorld();
     if (G.world !== this.worldKey) { this.reset(); this.setWorld(G); }
     const now = performance.now();
+    this.applyLight(G, Math.min(1, (now - (this.lastL || now)) / 1000 * 1.5));
+    this.lastL = now;
     if (this.size !== this.sizeKey(G)) { this.resize(G); this.reset(); }
     this.pace(now);
     this.canvas.style.display = "block";
@@ -1059,11 +1186,15 @@ const R3 = {
     // Most frames it has nothing on it, and a canvas nobody touches costs
     // nothing: the browser only re-uploads and re-blends a full-screen layer
     // that changed. So it is cleared once when it empties, then left alone.
-    const Fx = GK.Fx, busy = G._danger >= 0.02 || Fx.parts.length || Fx.texts.length || Fx.flash > 0;
+    const Fx = GK.Fx, weather = G.themeFx && G.themeFx.mote && Art.motion;
+    const busy = G._danger >= 0.02 || Fx.parts.length || Fx.texts.length || Fx.flash > 0 || G.overlayBusy() || weather;
     if (!busy && this.overlayClean) return;
     const ctx = G.ctx;
     ctx.clearRect(0, 0, G.W, G.H);
+    // a character theme's weather falls in front of the 3D world too
+    if (weather) Art.motes(ctx, G.W, G.H, G.elapsed, G.wi, G.themeFx);
     G.drawDanger();
+    G.drawOverlayFx(ctx);
     Fx.render(ctx);
     this.overlayClean = !busy;
   },

@@ -1,5 +1,5 @@
 <meta charset="utf-8" />
-<meta name="gk-version" content="31" data-date="2026-09-20" data-kit="1.10.1">
+<meta name="gk-version" content="32" data-date="2026-09-25" data-kit="1.10.1">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="css/style.css" id="css-new">
 <link rel="stylesheet" href="css/legacy.css" id="css-classic" disabled>
 <link rel="stylesheet" href="css/settings.css">
+<link rel="stylesheet" href="css/app.css">
 <script>
   // Pick the stylesheet before first paint, from the look this device last used.
   try { if (localStorage.getItem("cc_look") === "classic") {
@@ -31,10 +32,14 @@
     <h1 class="title">Chicken Cross</h1>
     <p class="subtitle">Dodge cars, ride logs, beat the trains!</p>
     <div class="content" style="text-align:center">
-      <!-- shown when this device has a last player: one-tap continue -->
-      <button class="btn green wide" id="btn-continue-as" style="display:none"></button>
+      <!-- shown when this device has a last player: one tap straight into a run -->
+      <button class="btn green wide hop-btn" id="btn-hop" style="display:none"></button>
+      <div class="row-btns2" id="splash-more" style="display:none">
+        <button class="btn blue" id="btn-continue-as">🏠 Menu</button>
+        <button class="btn grey" onclick="App.play()">👥 Switch</button>
+      </div>
       <button class="btn green wide" id="btn-play" onclick="App.play()">▶ Play</button>
-      <button class="btn blue wide" onclick="App.showLeaderboard()">🏆 High Scores</button>
+      <button class="btn blue wide" id="btn-scores" onclick="App.showLeaderboard()">🏆 High Scores</button>
       <!-- shown by the PWA script only when the app is installable and not yet installed -->
       <button class="btn grey wide" id="btn-install" style="display:none">📲 Add to Home Screen</button>
       <p style="opacity:.85;font-size:14px;margin-top:18px">
@@ -56,19 +61,63 @@
   <div class="content"><div class="profile-list" id="profile-list"></div></div>
 </div>
 
-<!-- ============ MAP ============ -->
+<!-- ============ HOME (the current player's) ============ -->
 <div class="screen opaque" id="screen-map">
   <div class="topbar">
-    <button class="iconbtn" onclick="App.play()" aria-label="Back to players">⬅</button>
+    <button class="iconbtn" onclick="App.play()" aria-label="Switch player">⬅</button>
     <div class="player-chip" id="map-player"></div>
     <div class="grow"></div>
     <button class="iconbtn" onclick="App.showLeaderboard()" aria-label="High scores">🏆</button>
     <button class="iconbtn btn-sound" aria-label="Toggle sound">🔊</button>
     <button class="iconbtn" onclick="App.openSettings()" aria-label="Settings">⚙️</button>
   </div>
-  <div class="content">
-    <button class="btn blue wide" id="btn-endless" onclick="App.startEndless()">♾️ Endless Run</button>
-    <div id="world-list"></div>
+  <div class="content home">
+    <button class="home-hero" id="home-hero" aria-label="Say hello to your character">
+      <canvas id="home-canvas" aria-hidden="true"></canvas>
+    </button>
+    <button class="home-name" id="home-name" onclick="App.showCollection()"></button>
+    <div class="home-stats" id="home-stats"></div>
+    <button class="btn green wide hop-btn" id="btn-endless" onclick="App.startEndless()">▶ Hop In<small>endless run</small></button>
+    <div class="row-btns2 home-more">
+      <button class="btn blue" onclick="App.showWorlds()">🗺️ Worlds<small id="home-worlds"></small></button>
+      <button class="btn" onclick="App.showCollection()">🐣 Characters<small id="home-chars"></small></button>
+    </div>
+    <button class="btn wide prize-cta" id="btn-prize" onclick="App.openPrize()"></button>
+  </div>
+</div>
+
+<!-- ============ WORLDS (the campaign) ============ -->
+<div class="screen opaque" id="screen-worlds">
+  <div class="topbar">
+    <button class="iconbtn" onclick="App.showHome()" aria-label="Back">⬅</button>
+    <h2 class="topbar-title">🗺️ Worlds</h2>
+    <div class="grow"></div>
+    <button class="iconbtn btn-sound" aria-label="Toggle sound">🔊</button>
+  </div>
+  <div class="content"><div id="world-list"></div></div>
+</div>
+
+<!-- ============ CHARACTERS ============ -->
+<div class="screen opaque" id="screen-collection">
+  <div class="topbar">
+    <button class="iconbtn" onclick="App.showHome()" aria-label="Back">⬅</button>
+    <div class="coll-title"><b>Characters</b><span id="coll-count"></span></div>
+    <div class="grow"></div>
+    <span class="coin-chip" id="coll-coins"></span>
+    <button class="iconbtn" onclick="App.openPrize()" aria-label="Prize Machine">🎰</button>
+  </div>
+  <div class="content coll">
+    <div class="coll-tools">
+      <input id="coll-search" type="search" autocomplete="off" placeholder="Search characters" aria-label="Search characters">
+      <select id="coll-col" aria-label="Collection"></select>
+      <div class="chips" id="coll-filter" role="group" aria-label="Show">
+        <button data-f="all" aria-pressed="true">All</button>
+        <button data-f="owned" aria-pressed="false">Owned</button>
+        <button data-f="locked" aria-pressed="false">Locked</button>
+        <button data-f="fav" aria-pressed="false">♥ Favourites</button>
+      </div>
+    </div>
+    <div id="coll-list"></div>
   </div>
 </div>
 
@@ -83,19 +132,23 @@
 </div>
 
 <!-- ============ GAME ============ -->
+<!-- The HUD hugs the top corners: distance and best on the left, coins and
+     pause on the right. Banners and the anti-stall warning sit low, over
+     ground already crossed, so nothing ever covers the lanes coming up. -->
 <div class="screen game" id="screen-game">
   <div id="gbar">
-    <button class="iconbtn" onclick="Game.exitToMap()" aria-label="Quit to map">⬅</button>
-    <div class="pill" id="g-progress">0</div>
-    <div class="grow" style="flex:1"></div>
+    <div class="hud-dist"><span id="g-progress">0</span><small id="g-best"></small></div>
+    <div class="grow"></div>
     <div class="pill" id="g-coins">🪙 0</div>
-    <button class="iconbtn" onclick="Game.pause()" aria-label="Pause">⏸</button>
+    <button class="iconbtn hud-pause" onclick="Game.pause()" aria-label="Pause">⏸</button>
   </div>
+  <div class="g-banner" id="g-banner" aria-live="polite"></div>
+  <div class="g-warn" id="g-warn" aria-live="polite"></div>
 </div>
 
 <!-- ============ MODALS ============ -->
 <!-- profile/PIN/delete + iOS-install modals are injected by gamekit -->
-<div class="modal" id="result-modal">
+<div class="modal result-modal" id="result-modal">
   <div class="sheet" id="result-sheet"></div>
 </div>
 
@@ -103,7 +156,7 @@
   <div class="sheet">
     <h2>⏸ Paused</h2>
     <div class="row-btns2">
-      <button class="btn grey" onclick="Game.exitToMap()">🗺️ Quit</button>
+      <button class="btn grey" onclick="Game.exitToMap()">🏠 Quit</button>
       <button class="btn green" onclick="Game.resume()">▶ Resume</button>
     </div>
   </div>
@@ -114,18 +167,26 @@
     <h2>⚙️ Settings</h2>
     <h3 id="view-label">View</h3>
     <div class="seg" role="group" aria-labelledby="view-label">
-      <button data-view="2d" aria-pressed="false">🗺️ 2D<small>flat, from above</small></button>
       <button data-view="3d" aria-pressed="false">🧊 3D<small>blocky world</small></button>
+      <button data-view="2d" aria-pressed="false">🗺️ 2D<small>flat, from above</small></button>
     </div>
     <h3 id="look-label">Look <span class="note" id="look-note">· 2D only</span></h3>
     <div class="seg" role="group" aria-labelledby="look-label">
       <button data-look="new" aria-pressed="false">✨ New<small>detailed worlds</small></button>
       <button data-look="classic" aria-pressed="false">🕹️ Classic<small>the original look</small></button>
     </div>
-    <h3 id="bird-label">Character</h3>
-    <div class="bird-grid" id="bird-grid" role="radiogroup" aria-labelledby="bird-label"></div>
+    <h3>Character</h3>
+    <button class="btn blue wide" onclick="App.closeSettings(); App.showCollection()">🐣 Choose a character</button>
     <button class="btn green wide" onclick="App.closeSettings()">Done</button>
   </div>
+</div>
+
+<div class="modal" id="char-modal">
+  <div class="sheet char-sheet" id="char-sheet"></div>
+</div>
+
+<div class="modal" id="prize-modal">
+  <div class="sheet prize-sheet" id="prize-sheet"></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -145,7 +206,13 @@
 <script src="js/levels.js"></script>
 <script src="js/game.js"></script>
 <script src="js/art.js"></script>
+<script src="js/characters.js"></script>
+<script src="js/plans.js"></script>
+<script src="js/roster.js"></script>
+<script src="js/roster-data.js"></script>
 <script src="js/render.js"></script>
 <script src="js/render-legacy.js"></script>
 <script src="js/render3d.js"></script>
+<script src="js/characters3d.js"></script>
+<script src="js/collection-ui.js"></script>
 <script src="js/main.js"></script>
