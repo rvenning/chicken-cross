@@ -189,7 +189,13 @@ function parseLine(line, col, i, PLANS) {
     const eq = kv.indexOf("="), k = kv.slice(0, eq), v = kv.slice(eq + 1);
     if (k === "r") ch.rarity = RARITIES[+v].id;
     else if (k === "f") ch.unlock = { type: "founding", emoji: v };
-    else if (k === "a") { const [stat, n] = v.split(":"); ch.unlock = { type: "ach", stat, n: +n || 1 }; }
+    else if (k === "a") {
+      // "best:100" is a stat and a number; "world:3" is a stat on its own
+      // (a finished world); "world3:3:12" is a per-world stat and a number.
+      const parts = v.split(":");
+      if (STATS[v]) ch.unlock = { type: "ach", stat: v, n: 1 };
+      else { const n = +parts.pop(); ch.unlock = { type: "ach", stat: parts.join(":"), n }; }
+    }
     else if (k === "s") ch.unlock = { type: "secret", secret: v };
     else if (k === "e") { const [ev, tier] = v.split(":"); ch.unlock = { type: "season", event: ev, tier: +tier || 1 }; }
     else if (k === "id") ch.id = v;
